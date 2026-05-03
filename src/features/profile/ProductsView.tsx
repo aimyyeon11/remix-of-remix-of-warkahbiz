@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Sparkles, Loader2, ChevronRight, ArrowLeft, Package } from "lucide-react";
-import { useServerFn } from "@tanstack/react-start";
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -826,7 +826,7 @@ const IngredientCard = ({
   onRemove: () => void;
 }) => {
   const { t } = useTranslation();
-  const estimate = useServerFn(estimateIngredientCost);
+  const estimate = estimateIngredientCost;
   const [estimating, setEstimating] = useState(false);
   const [editingCost, setEditingCost] = useState(false);
   const [costDraft, setCostDraft] = useState("");
