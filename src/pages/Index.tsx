@@ -55,20 +55,7 @@ const Index = () => {
   const [businessName, setBusinessName] = useState(() => localStorage.getItem("warkahbiz_business_name") || "");
 
   const [txns, setTxns] = useLocalStorage<Txn[]>("warkahbiz_txns", []);
-  const [stock, setStock] = useLocalStorage<StockItem[]>("warkahbiz_stock", [
-    { id: "s-ayam", emoji: "🍗", name: "Ayam", qty: 0, unit: "kg", minQty: 1, restockQty: 3, maxQty: 10, category: "Bahan Mentah" },
-    { id: "s-telur", emoji: "🥚", name: "Telur", qty: 0, unit: "papan", minQty: 1, restockQty: 3, maxQty: 10, category: "Bahan Mentah" },
-    { id: "s-beras", emoji: "🍚", name: "Beras", qty: 0, unit: "kg", minQty: 5, restockQty: 10, maxQty: 25, category: "Bahan Mentah" },
-    { id: "s-minyak", emoji: "🛢️", name: "Minyak", qty: 0, unit: "liter", minQty: 1, restockQty: 3, maxQty: 10, category: "Bahan Mentah" },
-    { id: "s-tepung", emoji: "🌾", name: "Tepung", qty: 0, unit: "kg", minQty: 1, restockQty: 3, maxQty: 10, category: "Bahan Mentah" },
-    { id: "s-gula", emoji: "🥤", name: "Gula", qty: 0, unit: "kg", minQty: 1, restockQty: 3, maxQty: 10, category: "Bahan Mentah" },
-    { id: "s-garam", emoji: "🧂", name: "Garam", qty: 0, unit: "kg", minQty: 0.5, restockQty: 1, maxQty: 3, category: "Bahan Mentah" },
-    { id: "s-bawang", emoji: "🧅", name: "Bawang", qty: 0, unit: "kg", minQty: 0.5, restockQty: 2, maxQty: 5, category: "Bahan Mentah" },
-    { id: "s-cili", emoji: "🌶️", name: "Cili", qty: 0, unit: "kg", minQty: 0.5, restockQty: 1, maxQty: 3, category: "Bahan Mentah" },
-    { id: "s-santan", emoji: "🥛", name: "Santan", qty: 0, unit: "pek", minQty: 2, restockQty: 5, maxQty: 15, category: "Bahan Mentah" },
-    { id: "s-gas", emoji: "⛽", name: "Gas", qty: 0, unit: "tong", minQty: 0, restockQty: 1, maxQty: 2, category: "Lain-lain" },
-    { id: "s-bungkus", emoji: "📦", name: "Bungkus", qty: 0, unit: "pek", minQty: 2, restockQty: 5, maxQty: 20, category: "Pembungkusan" },
-  ]);
+  const [stock, setStock] = useLocalStorage<StockItem[]>("warkahbiz_stock", []);
   const [buy, setBuy] = useLocalStorage<BuyItem[]>("warkahbiz_buy", []);
   const [petty, setPetty] = useLocalStorage<PettyEntry[]>("warkahbiz_petty", [
     { id: 1, type: "in", desc: "Top-up dari jualan", emoji: "💵", amount: 200, time: "Isnin 9:00am", balance: 200 },
