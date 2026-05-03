@@ -133,6 +133,13 @@ const Index = () => {
     setTxns((prev) => [...prev, { ...t, id: Date.now(), ts: Date.now(), time: nowTime(), createdAt: new Date().toISOString() }]);
   };
 
+  // Track the highest qty ever recorded for each stock item (used to auto-derive minQty)
+  const bumpPeak = (item: StockItem): StockItem => {
+    const peak = Math.max(item.maxQty ?? 0, item.qty);
+    const minQty = +(peak * 0.2).toFixed(2);
+    return { ...item, maxQty: peak, minQty };
+  };
+
   const handleReceiptConfirm = (items: ReceiptItem[]) => {
     const time = nowTime();
     const newTxns: Txn[] = items.map((r, i) => ({ id: Date.now() + i, ts: Date.now() + i, time, createdAt: new Date().toISOString(), type: "out", emoji: r.emoji, label: `Beli ${r.name}`, amount: r.price }));
