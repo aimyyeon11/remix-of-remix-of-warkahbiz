@@ -14,7 +14,7 @@ import { estimateIngredientCost } from "@/server/estimateCost.functions";
 import { multiplierFor, tierFor, tierLabelKey } from "./profitScale";
 import type { Product, ProductIngredient, ProductPackaging, Unit } from "@/types";
 
-const UNITS: Unit[] = ["kg", "g", "liter", "ml", "biji", "pek", "kotak", "batang", "helai", "tong", "papan", "kampit", "ekor", "unit", "pcs", "box", "pack", "dozen"];
+const UNITS: Unit[] = ["ekor", "kotak", "kg", "gram", "paket", "liter", "botol", "biji", "ikat", "tin", "bungkus", "sudu", "cawan"];
 const BATCH_UNITS = ["biji", "pcs", "servings", "kotak", "pek", "botol", "balang", "helai", "ketul"];
 
 const PRODUCT_CATEGORIES = ["Makanan", "Minuman", "Pek & Set", "Lain-lain"] as const;
