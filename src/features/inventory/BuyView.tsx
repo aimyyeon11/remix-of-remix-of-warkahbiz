@@ -1,51 +1,51 @@
-import { useState } from "react";
-import { Plus, RefreshCw, Share2, Check } from "lucide-react";
-import type { BuyItem, StockItem, Unit } from "@/types";
+import { useMemo } from "react";
+import { Check, Share2 } from "lucide-react";
+import type { BuyItem, StockItem, Product, Unit } from "@/types";
 
 export const BuyView = ({
   buy,
+  stock,
+  products,
   onToggleDone,
-  onResync,
   onSyncNotepad,
-  onGoToStock,
 }: {
   buy: BuyItem[];
   stock: StockItem[];
+  products: Product[];
   onToggleDone: (id: string) => void;
-  onResync: () => void;
+  onResync?: () => void;
   onSyncNotepad: (items: BuyItem[]) => void;
   onBulkDone?: (ids: string[]) => void;
   onBulkDelete?: (ids: string[]) => void;
   onClearCompleted?: () => void;
-  onGoToStock: () => void;
+  onGoToStock?: () => void;
 }) => {
-  const [tab, setTab] = useState<"all" | "todo" | "done">("all");
-  const [noteText, setNoteText] = useState<string>(() =>
-    buy.filter((b) => b.source === "manual").map((b) => b.name).join("\n"),
-  );
+  // Build text from current manual items, preserving order: undone first, done last
+  const undone = buy.filter((b) => !b.done);
+  const done = buy.filter((b) => b.done);
+  const noteText = undone.map((b) => b.name).join("\n");
 
-  const todoCount = buy.filter((b) => !b.done).length;
-  const doneCount = buy.length - todoCount;
-  const doneItems = buy.filter((b) => b.done);
-
-  const share = () => {
-    const date = new Date().toLocaleDateString("ms-MY", { day: "numeric", month: "long", year: "numeric" });
-    const lines = buy.filter((b) => !b.done).map((b) => `☐ ${b.name}${b.recQty ? ` - ${b.recQty}${b.unit}` : ""}`);
-    const text = `🛒 *Senarai Nak Beli - WarkahBiz*\n📅 ${date}\n\n${lines.join("\n")}\n\n_Dijana oleh WarkahBiz App_`;
-    if (navigator.share) {
-      navigator.share({ text }).catch(() => navigator.clipboard?.writeText(text));
-    } else {
-      navigator.clipboard?.writeText(text);
-    }
-  };
+  const lowStockSuggestions = useMemo(() => {
+    if (!products.length) return [];
+    const ingredientNames = new Set<string>();
+    products.forEach((p) =>
+      (p.ingredients ?? []).forEach((ing) => {
+        const n = ing.name.trim();
+        if (n) ingredientNames.add(n.toLowerCase());
+      }),
+    );
+    return stock.filter((s) => {
+      if (!ingredientNames.has(s.name.toLowerCase())) return false;
+      const peak = s.maxQty ?? 0;
+      return peak > 0 && s.qty < peak * 0.2;
+    });
+  }, [products, stock]);
 
   const handleNoteChange = (val: string) => {
-    setNoteText(val);
     const lines = val.split("\n").map((l) => l.trim()).filter(Boolean);
-    const autoItems = buy.filter((b) => b.source === "auto");
-    const newManualItems: BuyItem[] = lines.map((line, i) => {
+    const newUndone: BuyItem[] = lines.map((line, i) => {
       const existing = buy.find(
-        (b) => b.source === "manual" && b.name.toLowerCase() === line.toLowerCase(),
+        (b) => !b.done && b.name.toLowerCase() === line.toLowerCase(),
       );
       return (
         existing ?? {
@@ -63,152 +63,132 @@ export const BuyView = ({
         }
       );
     });
-    onSyncNotepad([...autoItems, ...newManualItems]);
+    onSyncNotepad([...newUndone, ...done]);
   };
 
-  const autoSugg = buy.filter((b) => b.source === "auto" && !b.done);
+  const share = () => {
+    const date = new Date().toLocaleDateString("ms-MY", {
+      day: "numeric", month: "long", year: "numeric",
+    });
+    const lines = undone.map((b) => `☐ ${b.name}`);
+    const text = `🛒 *Senarai Nak Beli - WarkahBiz*\n📅 ${date}\n\n${lines.join("\n")}\n\n_Dijana oleh WarkahBiz App_`;
+    if (navigator.share) {
+      navigator.share({ text }).catch(() => navigator.clipboard?.writeText(text));
+    } else {
+      navigator.clipboard?.writeText(text);
+    }
+  };
+
+  if (products.length === 0) {
+    return (
+      <div className="px-5 pt-6 pb-32">
+        <div className="rounded-2xl p-6 bg-surface border border-border text-center space-y-2">
+          <div className="text-4xl">📋</div>
+          <p className="text-sm text-muted-foreground">
+            Tiada produk disimpan. Sila tambah produk dalam Profil untuk menggunakan ciri ini.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const total = buy.length;
+  const doneCount = done.length;
 
   return (
-    <div className="px-5 pt-6 space-y-5 pb-32">
+    <div className="px-5 pt-6 space-y-4 pb-32">
       <header className="animate-fade-in">
-        <h1 className="text-2xl font-extrabold tracking-tight">Nak Beli 🛒</h1>
-        <p className="text-sm text-muted-foreground mt-1">Nota pembelian harian</p>
-        <div className="mt-3">
-          <div className="text-xs font-semibold text-muted-foreground">
-            {doneCount} / {buy.length} selesai
-          </div>
-          <div className="mt-1 h-2 rounded-full bg-surface overflow-hidden">
-            <div
-              className="h-full bg-profit transition-all"
-              style={{ width: buy.length ? `${(doneCount / buy.length) * 100}%` : "0%" }}
-            />
-          </div>
+        <div className="text-xs font-semibold text-muted-foreground">
+          {doneCount} / {total} selesai
+        </div>
+        <div className="mt-1 h-2 rounded-full bg-surface overflow-hidden">
+          <div
+            className="h-full bg-profit transition-all"
+            style={{ width: total ? `${(doneCount / total) * 100}%` : "0%" }}
+          />
         </div>
       </header>
 
-      {autoSugg.length > 0 && (
-        <div className="space-y-2 animate-fade-in">
-          <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-            🔴 Perlu Dibeli Semula
-            <button
-              onClick={onResync}
-              className="ml-auto w-7 h-7 rounded-lg bg-surface-elevated grid place-items-center tap"
-              aria-label="Segerak semula"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {autoSugg.map((b) => (
+      <div className="rounded-2xl border border-border bg-surface overflow-hidden">
+        <div className="px-4 py-2 border-b border-border bg-surface-elevated flex items-center gap-2">
+          <span className="text-xs font-bold text-muted-foreground">📝 Senarai Nak Beli</span>
+          <span className="ml-auto text-[10px] text-muted-foreground">
+            satu item satu baris
+          </span>
+        </div>
+
+        <textarea
+          value={noteText}
+          onChange={(e) => handleNoteChange(e.target.value)}
+          placeholder={"ayam dua ekor\nikan 1 kg\nbawang merah\n..."}
+          className="w-full min-h-[140px] p-4 bg-transparent text-sm font-medium resize-none focus:outline-none placeholder:text-muted-foreground/40 font-mono"
+          style={{ lineHeight: "1.75rem" }}
+        />
+
+        {undone.length > 0 && (
+          <div className="px-2 pb-2 space-y-1 border-t border-border pt-2">
+            {undone.map((b) => (
               <button
                 key={b.id}
-                onClick={() => {
-                  if (!noteText.toLowerCase().includes(b.name.toLowerCase())) {
-                    const next = noteText ? noteText + "\n" + b.name : b.name;
-                    handleNoteChange(next);
-                  }
-                  onToggleDone(b.id);
-                }}
-                className="px-3 py-1.5 rounded-full bg-cost/10 border border-cost/30 text-cost text-xs font-bold tap flex items-center gap-1"
+                onClick={() => onToggleDone(b.id)}
+                className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-surface-elevated tap text-left"
               >
-                {b.emoji} {b.name} <span className="opacity-60">({b.recQty}{b.unit})</span>
-                <Plus className="w-3 h-3 ml-1" />
+                <span className="w-5 h-5 rounded border-2 border-border grid place-items-center shrink-0" />
+                <span className="text-sm font-medium flex-1 truncate">{b.name}</span>
               </button>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="flex p-1 rounded-2xl bg-surface border border-border gap-1">
-        {([
-          ["all", "Semua", buy.length],
-          ["todo", "Belum Beli", todoCount],
-          ["done", "Sudah Beli", doneCount],
-        ] as const).map(([key, label, n]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`flex-1 h-11 rounded-xl text-xs font-bold tap transition-all duration-150 ${
-              tab === key
-                ? "bg-gradient-profit text-profit-foreground shadow-card border-transparent"
-                : "text-muted-foreground"
-            }`}
-          >
-            {label} ({n})
-          </button>
-        ))}
-      </div>
-
-      {(tab === "all" || tab === "todo") && (
-        <div className="rounded-2xl border border-border bg-surface overflow-hidden">
-          <div className="px-4 py-2 border-b border-border bg-surface-elevated flex items-center gap-2">
-            <span className="text-xs font-bold text-muted-foreground">📝 Nota Pembelian</span>
-            <span className="ml-auto text-[10px] text-muted-foreground">ketik bebas, satu item satu baris</span>
-          </div>
-          <textarea
-            value={noteText}
-            onChange={(e) => handleNoteChange(e.target.value)}
-            placeholder={"telur\nminyak masak\nbawang merah\ntepung\n..."}
-            className="w-full min-h-[180px] p-4 bg-transparent text-sm font-medium resize-none focus:outline-none placeholder:text-muted-foreground/40 font-mono"
-            style={{ lineHeight: "2rem" }}
-          />
-          <div className="px-4 pb-3 pt-2 flex items-center gap-2 border-t border-border">
-            <span className="text-[10px] text-muted-foreground">
-              {noteText.split("\n").filter(Boolean).length} item dalam senarai
-            </span>
-            <button
-              onClick={share}
-              className="ml-auto h-8 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-bold tap flex items-center gap-1"
-            >
-              <Share2 className="w-3 h-3" /> Kongsi
-            </button>
-          </div>
-        </div>
-      )}
-
-      {tab === "done" && (
-        doneItems.length === 0 ? (
-          <div className="rounded-2xl p-6 bg-surface border border-border text-center text-muted-foreground text-sm">
-            Belum ada item yang dibeli
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {doneItems.map((b) => (
-              <div
+        {done.length > 0 && (
+          <div className="px-2 pb-2 space-y-1 border-t border-border pt-2">
+            <div className="px-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+              Sudah Beli
+            </div>
+            {done.map((b) => (
+              <button
                 key={b.id}
-                className="rounded-2xl p-3 border flex items-center gap-3 animate-fade-in bg-profit/5 border-profit/20"
+                onClick={() => onToggleDone(b.id)}
+                className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-surface-elevated tap text-left"
               >
-                <button
-                  onClick={() => onToggleDone(b.id)}
-                  className="w-7 h-7 rounded-full border-2 grid place-items-center tap shrink-0 bg-profit border-profit text-profit-foreground"
-                  aria-label="Nyahtanda"
-                >
-                  <Check className="w-4 h-4" strokeWidth={3} />
-                </button>
-                <div className="text-2xl shrink-0">{b.emoji}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm line-through text-muted-foreground">{b.name}</div>
-                  {b.recQty ? (
-                    <div className="text-[11px] text-muted-foreground font-semibold">
-                      {b.recQty} {b.unit}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+                <span className="w-5 h-5 rounded bg-profit border-2 border-profit grid place-items-center shrink-0 text-profit-foreground">
+                  <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                </span>
+                <span className="text-sm font-medium line-through text-muted-foreground flex-1 truncate">
+                  {b.name}
+                </span>
+              </button>
             ))}
           </div>
-        )
-      )}
+        )}
 
-      {buy.length === 0 && tab !== "done" && noteText.trim() === "" && (
-        <div className="rounded-2xl p-6 bg-surface border border-border text-center space-y-2">
-          <div className="text-4xl">🧺</div>
-          <p className="text-xs text-muted-foreground">Mula menaip di nota di atas, atau semak stok anda</p>
-          <button onClick={onGoToStock} className="h-10 px-4 rounded-2xl bg-primary text-primary-foreground text-xs font-bold tap">
-            Pergi ke Stok →
+        {lowStockSuggestions.length > 0 && (
+          <div className="px-4 py-3 border-t border-border bg-surface-elevated/50">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+              Cadangan stok rendah:
+            </div>
+            <ul className="space-y-0.5">
+              {lowStockSuggestions.map((s) => (
+                <li key={s.id} className="text-xs text-muted-foreground">
+                  • {s.name} — <span className="text-warn font-semibold">stok rendah</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="px-4 pb-3 pt-2 flex items-center gap-2 border-t border-border">
+          <span className="text-[10px] text-muted-foreground">
+            {undone.length} item belum dibeli
+          </span>
+          <button
+            onClick={share}
+            className="ml-auto h-8 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-bold tap flex items-center gap-1"
+          >
+            <Share2 className="w-3 h-3" /> Kongsi
           </button>
         </div>
-      )}
+      </div>
     </div>
   );
 };
