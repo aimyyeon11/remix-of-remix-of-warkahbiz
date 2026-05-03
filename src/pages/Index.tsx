@@ -150,13 +150,18 @@ const Index = () => {
   const handleBought = (id: string) => setBuy((prev) => prev.map((b) => b.id === id ? { ...b, done: !b.done } : b));
 
   const handleAdjustStock = (id: string, delta: number) => {
-    setStock((prev) => prev.map((s) => s.id !== id ? s : { ...s, qty: Math.max(0, +(s.qty + delta).toFixed(2)) }));
+    setStock((prev) => prev.map((s) => {
+      if (s.id !== id) return s;
+      const qty = Math.max(0, +(s.qty + delta).toFixed(2));
+      return bumpPeak({ ...s, qty });
+    }));
   };
 
   const handleSaveStock = (item: StockItem) => {
     setStock((prev) => {
+      const next = bumpPeak(item);
       const exists = prev.find((s) => s.id === item.id);
-      return exists ? prev.map((s) => s.id === item.id ? item : s) : [...prev, item];
+      return exists ? prev.map((s) => s.id === item.id ? next : s) : [...prev, next];
     });
     toast.success("Stok disimpan ✅");
   };
@@ -271,7 +276,7 @@ const Index = () => {
   const handleBoughtItems = (items: Array<{ name: string; qty: number; unit: string; isOpEx?: boolean }>) => {
     const isMatch = (a: string, b: string) => { const x = a.toLowerCase().trim(); const y = b.toLowerCase().trim(); return x === y || x.includes(y) || y.includes(x); };
     items.forEach((item) => {
-      setStock(prev => { const idx = prev.findIndex(s => isMatch(s.name, item.name)); if (idx === -1) return prev; const updated = [...prev]; updated[idx] = { ...updated[idx], qty: +(updated[idx].qty + item.qty).toFixed(2) }; return updated; });
+      setStock(prev => { const idx = prev.findIndex(s => isMatch(s.name, item.name)); if (idx === -1) return prev; const updated = [...prev]; const merged = { ...updated[idx], qty: +(updated[idx].qty + item.qty).toFixed(2) }; updated[idx] = bumpPeak(merged); return updated; });
       setBuy(prev => prev.map(b => isMatch(b.name, item.name) && !b.done ? { ...b, done: true } : b));
     });
     toast.success(`${items.length} item dikemaskini dalam Stok & Senarai ✅`);
