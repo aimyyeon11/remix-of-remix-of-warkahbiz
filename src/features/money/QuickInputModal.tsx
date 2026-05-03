@@ -1,35 +1,59 @@
-import { useState } from "react";
-import { X, Check, Delete, Camera, Plus } from "lucide-react";
-import type { Txn, TxnType, ReceiptItem } from "@/types";
+import { useMemo, useState } from "react";
+import { X, Check, Delete, Camera, Plus, Trash2, ArrowLeft } from "lucide-react";
+import type { Txn, TxnType, ReceiptItem, Product, Unit } from "@/types";
 import { ReceiptScanner } from "@/features/inventory/ReceiptScanner";
-
-const expenseCats = [
-  { emoji: "🍗", name: "Ayam" },     { emoji: "🛢️", name: "Minyak" },
-  { emoji: "🌾", name: "Tepung" },   { emoji: "🍚", name: "Beras" },
-  { emoji: "🥚", name: "Telur" },    { emoji: "📦", name: "Bungkus" },
-  { emoji: "⛽", name: "Gas" },      { emoji: "🏷️", name: "Lain" },
-];
 
 const incomeSuggestions = ["Jualan Pagi", "Jualan Petang", "Penghantaran"];
 
-export const QuickInputModal = ({ onClose, onSave, onReceiptConfirm, onBoughtItems }: {
+const ALLOWED_UNITS: Unit[] = [
+  "ekor", "kotak", "kg", "gram", "paket", "liter", "botol",
+  "biji", "ikat", "tin", "bungkus", "sudu", "cawan",
+];
+
+type PurchaseLine = { name: string; qty: number; unit: Unit; amount: number };
+type Step = "amount" | "name" | "qty";
+
+export const QuickInputModal = ({ onClose, onSave, onReceiptConfirm, onBoughtItems, products }: {
   onClose: () => void;
   onSave: (t: Omit<Txn, "id" | "ts" | "time">) => void;
-  onReceiptConfirm: (items: ReceiptItem[]) => void;
+  onReceiptConfirm?: (items: ReceiptItem[]) => void;
   onBoughtItems?: (items: Array<{ name: string; qty: number; unit: string; isOpEx: boolean }>) => void;
+  products: Product[];
 }) => {
   const [mode, setMode] = useState<TxnType>("in");
-  const [amount, setAmount] = useState("0");
+  const [amount, setAmount] = useState("0"); // for income mode
   const [note, setNote] = useState("");
-  const [cat, setCat] = useState<{ emoji: string; name: string } | null>(null);
   const [success, setSuccess] = useState(false);
   const [scanner, setScanner] = useState(false);
-  const [purchaseItems, setPurchaseItems] = useState<Array<{ emoji: string; name: string; qty: number; unit: string; isOpEx: boolean }>>([]);
-  const [customItem, setCustomItem] = useState("");
-  const [lainNote, setLainNote] = useState("");
 
-  const press = (k: string) => {
-    setAmount(prev => {
+  // Multi-item purchase session
+  const [items, setItems] = useState<PurchaseLine[]>([]);
+  const [step, setStep] = useState<Step>("amount");
+  const [draftAmount, setDraftAmount] = useState("0");
+  const [draftName, setDraftName] = useState("");
+  const [draftQty, setDraftQty] = useState("1");
+  const [draftUnit, setDraftUnit] = useState<Unit>("kg");
+  const [confirming, setConfirming] = useState(false);
+
+  // Unique ingredient list across all products
+  const ingredientOptions = useMemo(() => {
+    const seen = new Map<string, Unit>();
+    products.forEach(p => (p.ingredients ?? []).forEach(ing => {
+      const key = ing.name.trim();
+      if (!key) return;
+      if (!seen.has(key.toLowerCase())) seen.set(key.toLowerCase(), ing.unit);
+    }));
+    return Array.from(seen.entries()).map(([k, u]) => ({
+      name: products.flatMap(p => p.ingredients ?? []).find(i => i.name.trim().toLowerCase() === k)?.name.trim() ?? k,
+      unit: u,
+    }));
+  }, [products]);
+
+  const hasProducts = products.length > 0 && ingredientOptions.length > 0;
+
+  const press = (k: string, target: "income" | "draft") => {
+    const setter = target === "income" ? setAmount : setDraftAmount;
+    setter(prev => {
       if (k === "del") return prev.length <= 1 ? "0" : prev.slice(0, -1);
       if (k === ".") return prev.includes(".") ? prev : prev + ".";
       if (prev === "0") return k;
@@ -37,44 +61,77 @@ export const QuickInputModal = ({ onClose, onSave, onReceiptConfirm, onBoughtIte
     });
   };
 
-  const handleSave = () => {
-    if (mode === "in") {
-      if (parseFloat(amount) <= 0) return;
-      setSuccess(true);
-      setTimeout(() => {
-        onSave({ type: "in", emoji: "💰", label: note || "Jualan", amount: parseFloat(amount) });
-        onClose();
-      }, 900);
-    } else {
-      if (!cat) return;
-      setSuccess(true);
-      setTimeout(() => {
-        const value = parseFloat(amount) || 0;
-        const itemLabel = cat.name === "Lain" && lainNote.trim()
-          ? `Beli ${lainNote.trim()}`
-          : `Beli ${cat.name}`;
-        onSave({ type: "out", emoji: cat.emoji, label: itemLabel, amount: value });
-        let finalItems = [...purchaseItems];
-        if (cat.name === "Lain" && lainNote.trim()) {
-          const alreadyInList = finalItems.some(p => p.name.toLowerCase() === lainNote.trim().toLowerCase());
-          if (!alreadyInList) {
-            finalItems = [...finalItems, {
-              emoji: "🏷️",
-              name: lainNote.trim(),
-              qty: 1,
-              unit: "biji",
-              isOpEx: false,
-            }];
-          }
-        }
-        if (finalItems.length > 0 && onBoughtItems) {
-          onBoughtItems(finalItems);
-        }
-        setLainNote("");
-        onClose();
-      }, 900);
-    }
+  const handleSaveIncome = () => {
+    if (parseFloat(amount) <= 0) return;
+    setSuccess(true);
+    setTimeout(() => {
+      onSave({ type: "in", emoji: "💰", label: note || "Jualan", amount: parseFloat(amount) });
+      onClose();
+    }, 800);
   };
+
+  // === Purchase flow handlers ===
+  const resetDraft = () => {
+    setStep("amount");
+    setDraftAmount("0");
+    setDraftName("");
+    setDraftQty("1");
+    setDraftUnit(ingredientOptions[0]?.unit ?? "kg");
+  };
+
+  const commitDraft = () => {
+    const amt = parseFloat(draftAmount) || 0;
+    const qty = parseFloat(draftQty) || 0;
+    if (!draftName || amt <= 0 || qty <= 0) return;
+    setItems(prev => [...prev, { name: draftName, qty, unit: draftUnit, amount: amt }]);
+    resetDraft();
+  };
+
+  const handleAddMore = () => {
+    commitDraft();
+  };
+
+  const handleFinishToConfirm = () => {
+    // If user is mid-draft with valid values, commit it first
+    const amt = parseFloat(draftAmount) || 0;
+    const qty = parseFloat(draftQty) || 0;
+    if (draftName && amt > 0 && qty > 0) {
+      setItems(prev => [...prev, { name: draftName, qty, unit: draftUnit, amount: amt }]);
+      resetDraft();
+    }
+    setConfirming(true);
+  };
+
+  const handleConfirmFinal = () => {
+    if (items.length === 0) return;
+    setSuccess(true);
+    setTimeout(() => {
+      const t = new Date();
+      items.forEach(it => {
+        onSave({ type: "out", emoji: "🛒", label: `Beli ${it.name}`, amount: it.amount });
+      });
+      if (onBoughtItems) {
+        onBoughtItems(items.map(it => ({ name: it.name, qty: it.qty, unit: it.unit, isOpEx: false })));
+      }
+      void t;
+      onClose();
+    }, 800);
+  };
+
+  // Receipt scan -> feed into confirmation screen
+  const handleScannerConfirm = (scanned: ReceiptItem[]) => {
+    const mapped: PurchaseLine[] = scanned.map(s => ({
+      name: s.name,
+      qty: s.qty || 1,
+      unit: (ALLOWED_UNITS.includes(s.unit as Unit) ? (s.unit as Unit) : "biji"),
+      amount: s.price || 0,
+    }));
+    setItems(prev => [...prev, ...mapped]);
+    setScanner(false);
+    setConfirming(true);
+  };
+
+  const totalSpent = items.reduce((s, i) => s + i.amount, 0);
 
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center" onClick={onClose}>
@@ -83,220 +140,267 @@ export const QuickInputModal = ({ onClose, onSave, onReceiptConfirm, onBoughtIte
         onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-[440px] h-[88vh] bg-surface rounded-t-[2.5rem] animate-slide-up flex flex-col"
       >
-        {/* handle */}
         <div className="pt-3 pb-1 grid place-items-center">
           <div className="w-12 h-1.5 rounded-full bg-muted-foreground/40" />
         </div>
 
-        {/* close */}
-        <button onClick={onClose} className="absolute top-4 right-4 w-9 h-9 rounded-full bg-surface-elevated grid place-items-center tap">
+        <button onClick={onClose} className="absolute top-4 right-4 w-9 h-9 rounded-full bg-surface-elevated grid place-items-center tap z-10">
           <X className="w-5 h-5" />
         </button>
 
-        {/* tabs */}
-        <div className="px-5 mt-2">
-          <div className="rounded-2xl p-1 bg-surface-elevated grid grid-cols-2 gap-1">
-            <button
-              onClick={() => setMode("in")}
-              className={`py-3 rounded-xl font-bold text-sm tap ${mode === "in" ? "bg-gradient-profit text-profit-foreground shadow-card" : "text-muted-foreground"}`}
-            >
-              💰 Dapat Duit
-            </button>
-            <button
-              onClick={() => setMode("out")}
-              className={`py-3 rounded-xl font-bold text-sm tap ${mode === "out" ? "bg-gradient-cost text-white shadow-card" : "text-muted-foreground"}`}
-            >
-              💸 Dah Belanja
-            </button>
-          </div>
-        </div>
-
-        {mode === "out" ? (
-          <div className="flex flex-col flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto px-5 mt-4 space-y-4 pb-4">
+        {!confirming && (
+          <div className="px-5 mt-2">
+            <div className="rounded-2xl p-1 bg-surface-elevated grid grid-cols-2 gap-1">
               <button
-                onClick={() => setScanner(true)}
-                className="w-full h-12 rounded-2xl border-2 border-dashed border-warn/50 text-warn font-bold tap flex items-center justify-center gap-2 bg-warn/5"
+                onClick={() => setMode("in")}
+                className={`py-3 rounded-xl font-bold text-sm tap ${mode === "in" ? "bg-gradient-profit text-profit-foreground shadow-card" : "text-muted-foreground"}`}
               >
-                <Camera className="w-5 h-5" /> Scan Resit / Invoice
+                💰 Dapat Duit
               </button>
+              <button
+                onClick={() => { setMode("out"); if (!draftUnit && ingredientOptions[0]) setDraftUnit(ingredientOptions[0].unit); }}
+                className={`py-3 rounded-xl font-bold text-sm tap ${mode === "out" ? "bg-gradient-cost text-white shadow-card" : "text-muted-foreground"}`}
+              >
+                💸 Pembelian
+              </button>
+            </div>
+          </div>
+        )}
 
-              <div>
-                <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
-                  Pilih Kategori Belanja
-                </div>
-                <div className="grid grid-cols-4 gap-2">
-                  {expenseCats.map(c => (
-                    <button
-                      key={c.name}
-                      onClick={() => { setCat(c); if (c.name !== "Lain") setLainNote(""); }}
-                      className={`aspect-square rounded-2xl flex flex-col items-center justify-center gap-1 tap border ${
-                        cat?.name === c.name ? "bg-cost/20 border-cost" : "bg-surface-elevated border-border"
-                      }`}
-                    >
-                      <span className="text-2xl">{c.emoji}</span>
-                      <span className="text-[10px] font-semibold">{c.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {cat?.name === "Lain" && (
-                <div className="space-y-1.5 animate-fade-in">
-                  <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Nama Item yang Dibeli
-                  </div>
-                  <input
-                    value={lainNote}
-                    onChange={(e) => setLainNote(e.target.value)}
-                    placeholder="cth: sayur bayam, sos tiram, kicap..."
-                    className="w-full h-12 px-4 rounded-2xl bg-surface-elevated border border-border text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:border-primary text-sm"
-                    autoFocus
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    💡 Item ini akan direkodkan dan dikemaskini dalam stok secara automatik
+        {/* PURCHASE / OUT MODE */}
+        {mode === "out" && !confirming && (
+          <div className="flex flex-col flex-1 overflow-hidden">
+            {!hasProducts ? (
+              <div className="flex-1 grid place-items-center px-6">
+                <div className="text-center space-y-4 max-w-xs">
+                  <div className="text-5xl">📋</div>
+                  <p className="text-sm font-semibold">
+                    Sila tambah produk dalam Profil sebelum merekod pembelian.
                   </p>
-                </div>
-              )}
-
-              <div>
-                <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
-                  Jumlah Belanja (RM)
-                </div>
-                <div className="rounded-2xl p-4 text-center bg-cost/10">
-                  <div className="text-4xl font-extrabold text-cost">RM {amount}</div>
-                </div>
-                <div className="mt-2 grid grid-cols-5 gap-1.5">
-                  {["1","2","3","4","5","6","7","8","9","0",".",".00","del","C",""].map((k, idx) => {
-                    if (k === "") return <div key={idx} />;
-                    return (
-                      <button
-                        key={k + idx}
-                        onClick={() => {
-                          if (k === "C") { setAmount("0"); return; }
-                          if (k === ".00") { setAmount(prev => prev.includes(".") ? prev : prev + ".00"); return; }
-                          press(k);
-                        }}
-                        className="h-10 rounded-xl bg-surface-elevated text-base font-bold tap grid place-items-center"
-                      >
-                        {k === "del" ? <Delete className="w-4 h-4" /> : k}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-surface border-2 border-primary/20 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">📦</span>
-                  <div>
-                    <div className="text-sm font-extrabold">Apa yang dah beli?</div>
-                    <div className="text-[11px] text-muted-foreground">Stok & senarai Nak Beli akan dikemaskini automatik</div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    {emoji:"🍗", name:"Ayam"}, {emoji:"🥚", name:"Telur"}, {emoji:"🍚", name:"Beras"},
-                    {emoji:"🛢️", name:"Minyak"}, {emoji:"🌾", name:"Tepung"}, {emoji:"⛽", name:"Gas"},
-                    {emoji:"🧅", name:"Bawang"}, {emoji:"🌶️", name:"Cili"}, {emoji:"🥛", name:"Santan"},
-                    {emoji:"📦", name:"Bungkus"}, {emoji:"🥤", name:"Gula"}, {emoji:"🧂", name:"Garam"},
-                  ].map(item => {
-                    const alreadyAdded = purchaseItems.some(p => p.name.toLowerCase() === item.name.toLowerCase());
-                    return (
-                      <button
-                        key={item.name}
-                        onClick={() => {
-                          if (alreadyAdded) return;
-                          setPurchaseItems(prev => [...prev, { emoji: item.emoji, name: item.name, qty: 1, unit: "biji", isOpEx: false }]);
-                        }}
-                        className={`px-2.5 py-1 rounded-full text-xs font-bold tap border transition-all ${
-                          alreadyAdded
-                            ? "bg-profit/20 border-profit text-profit"
-                            : "bg-surface-elevated border-border text-muted-foreground"
-                        }`}
-                      >
-                        {item.emoji} {item.name} {alreadyAdded ? "✓" : "+"}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="flex gap-2">
-                  <input
-                    value={customItem}
-                    onChange={(e) => setCustomItem(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && customItem.trim()) {
-                        setPurchaseItems(prev => [...prev, { emoji: "🛒", name: customItem.trim(), qty: 1, unit: "biji", isOpEx: false }]);
-                        setCustomItem("");
-                      }
-                    }}
-                    placeholder="Tambah item lain... (tekan Enter)"
-                    className="flex-1 h-10 px-3 rounded-xl bg-background border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                  <button
-                    onClick={() => {
-                      if (!customItem.trim()) return;
-                      setPurchaseItems(prev => [...prev, { emoji: "🛒", name: customItem.trim(), qty: 1, unit: "biji", isOpEx: false }]);
-                      setCustomItem("");
-                    }}
-                    className="w-10 h-10 rounded-xl bg-primary text-primary-foreground grid place-items-center tap"
-                  >
-                    <Plus className="w-4 h-4" />
+                  <button onClick={onClose} className="h-12 px-6 rounded-2xl bg-primary text-primary-foreground font-bold tap">
+                    Tutup
                   </button>
                 </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 overflow-y-auto px-5 mt-4 space-y-4 pb-4">
+                  <button
+                    onClick={() => setScanner(true)}
+                    className="w-full h-12 rounded-2xl border-2 border-dashed border-warn/50 text-warn font-bold tap flex items-center justify-center gap-2 bg-warn/5"
+                  >
+                    <Camera className="w-5 h-5" /> Scan Resit / Invoice
+                  </button>
 
-                {purchaseItems.length > 0 && (
-                  <div className="space-y-2 mt-1">
-                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Item dipilih:</div>
-                    {purchaseItems.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-2 rounded-xl bg-background border border-border p-2">
-                        <span className="text-lg">{item.emoji}</span>
-                        <span className="flex-1 text-sm font-semibold">{item.name}</span>
+                  {/* Running summary */}
+                  {items.length > 0 && (
+                    <div className="rounded-2xl bg-background border border-border p-3 space-y-2">
+                      <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        Item dalam sesi ini ({items.length})
+                      </div>
+                      {items.map((it, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-sm">
+                          <span className="flex-1 font-semibold">{it.name}</span>
+                          <span className="text-xs text-muted-foreground">{it.qty} {it.unit}</span>
+                          <span className="font-bold w-16 text-right">RM {it.amount.toFixed(2)}</span>
+                          <button
+                            onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}
+                            className="w-6 h-6 rounded-md bg-cost/10 text-cost grid place-items-center tap"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <div className="border-t border-border pt-2 flex justify-between text-sm">
+                        <span className="font-bold text-muted-foreground">Jumlah</span>
+                        <span className="font-extrabold text-cost">RM {totalSpent.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Stepper */}
+                  <div className="rounded-2xl bg-background border-2 border-primary/20 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                      Item baharu
+                      <span className="ml-auto text-[10px] normal-case font-semibold text-primary">
+                        Langkah {step === "amount" ? "1" : step === "name" ? "2" : "3"} / 3
+                      </span>
+                    </div>
+
+                    {step === "amount" && (
+                      <div className="space-y-3 animate-fade-in">
+                        <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          Berapa dibayar untuk item ini? (RM)
+                        </div>
+                        <div className="rounded-2xl p-4 text-center bg-cost/10">
+                          <div className="text-4xl font-extrabold text-cost">RM {draftAmount}</div>
+                        </div>
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {["1","2","3","4","5","6","7","8","9","0",".",".00","del","C",""].map((k, idx) => {
+                            if (k === "") return <div key={idx} />;
+                            return (
+                              <button
+                                key={k + idx}
+                                onClick={() => {
+                                  if (k === "C") { setDraftAmount("0"); return; }
+                                  if (k === ".00") { setDraftAmount(p => p.includes(".") ? p : p + ".00"); return; }
+                                  press(k, "draft");
+                                }}
+                                className="h-10 rounded-xl bg-surface-elevated text-base font-bold tap grid place-items-center"
+                              >
+                                {k === "del" ? <Delete className="w-4 h-4" /> : k}
+                              </button>
+                            );
+                          })}
+                        </div>
                         <button
-                          onClick={() => setPurchaseItems(prev => prev.map((p, i) => i === idx ? { ...p, qty: Math.max(0.5, +(p.qty - 0.5).toFixed(1)) } : p))}
-                          className="w-7 h-7 rounded-lg bg-surface-elevated grid place-items-center tap text-sm font-bold"
-                        >−</button>
-                        <span className="w-8 text-center text-sm font-bold">{item.qty}</span>
-                        <button
-                          onClick={() => setPurchaseItems(prev => prev.map((p, i) => i === idx ? { ...p, qty: +(p.qty + 0.5).toFixed(1) } : p))}
-                          className="w-7 h-7 rounded-lg bg-surface-elevated grid place-items-center tap text-sm font-bold"
-                        >+</button>
-                        <select
-                          value={item.unit}
-                          onChange={(e) => setPurchaseItems(prev => prev.map((p, i) => i === idx ? { ...p, unit: e.target.value } : p))}
-                          className="h-7 px-1 rounded-lg bg-surface-elevated border border-border text-xs"
+                          disabled={parseFloat(draftAmount) <= 0}
+                          onClick={() => setStep("name")}
+                          className="w-full h-12 rounded-2xl bg-primary text-primary-foreground font-bold tap disabled:opacity-50"
                         >
-                          {["biji","kg","g","liter","ml","pek","kotak","kampit","papan","ekor"].map(u => (
-                            <option key={u} value={u}>{u}</option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={() => setPurchaseItems(prev => prev.filter((_, i) => i !== idx))}
-                          className="w-7 h-7 rounded-lg bg-cost/10 text-cost grid place-items-center tap"
-                        >
-                          <X className="w-3 h-3" />
+                          Seterusnya →
                         </button>
                       </div>
-                    ))}
+                    )}
+
+                    {step === "name" && (
+                      <div className="space-y-3 animate-fade-in">
+                        <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          Pilih nama item
+                        </div>
+                        <select
+                          value={draftName}
+                          onChange={(e) => {
+                            const name = e.target.value;
+                            setDraftName(name);
+                            const found = ingredientOptions.find(i => i.name === name);
+                            if (found) setDraftUnit(found.unit);
+                          }}
+                          className="w-full h-12 px-3 rounded-2xl bg-surface-elevated border border-border text-sm font-semibold focus:outline-none focus:border-primary"
+                        >
+                          <option value="">— Pilih bahan —</option>
+                          {ingredientOptions.map(opt => (
+                            <option key={opt.name} value={opt.name}>{opt.name}</option>
+                          ))}
+                        </select>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button onClick={() => setStep("amount")} className="h-12 rounded-2xl bg-surface-elevated border border-border font-bold tap flex items-center justify-center gap-1">
+                            <ArrowLeft className="w-4 h-4" /> Kembali
+                          </button>
+                          <button
+                            disabled={!draftName}
+                            onClick={() => setStep("qty")}
+                            className="h-12 rounded-2xl bg-primary text-primary-foreground font-bold tap disabled:opacity-50"
+                          >
+                            Seterusnya →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {step === "qty" && (
+                      <div className="space-y-3 animate-fade-in">
+                        <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          Kuantiti & unit
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            value={draftQty}
+                            onChange={(e) => setDraftQty(e.target.value)}
+                            className="h-12 px-3 rounded-2xl bg-surface-elevated border border-border text-base font-semibold focus:outline-none focus:border-primary"
+                            placeholder="Kuantiti"
+                          />
+                          <select
+                            value={draftUnit}
+                            onChange={(e) => setDraftUnit(e.target.value as Unit)}
+                            className="h-12 px-3 rounded-2xl bg-surface-elevated border border-border text-sm font-semibold focus:outline-none focus:border-primary"
+                          >
+                            {ALLOWED_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                          </select>
+                        </div>
+                        <div className="rounded-xl bg-surface-elevated p-3 text-xs">
+                          <div className="font-bold">{draftName}</div>
+                          <div className="text-muted-foreground mt-0.5">
+                            {draftQty} {draftUnit} · RM {parseFloat(draftAmount).toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={handleAddMore}
+                            disabled={!draftName || parseFloat(draftQty) <= 0 || parseFloat(draftAmount) <= 0}
+                            className="h-12 rounded-2xl bg-surface-elevated border border-primary text-primary font-bold tap flex items-center justify-center gap-1 disabled:opacity-50"
+                          >
+                            <Plus className="w-4 h-4" /> Tambah item lagi
+                          </button>
+                          <button
+                            onClick={() => setStep("name")}
+                            className="h-12 rounded-2xl bg-surface-elevated border border-border font-bold tap flex items-center justify-center gap-1"
+                          >
+                            <ArrowLeft className="w-4 h-4" /> Kembali
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
+
+                <div className="px-5 pt-3 pb-6 shrink-0">
+                  <button
+                    onClick={handleFinishToConfirm}
+                    disabled={items.length === 0 && (step !== "qty" || !draftName || parseFloat(draftQty) <= 0 || parseFloat(draftAmount) <= 0)}
+                    className="w-full h-14 rounded-2xl font-extrabold text-lg tap shadow-card bg-gradient-cost text-white disabled:opacity-50"
+                  >
+                    Simpan & Selesai ✅
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* CONFIRMATION SCREEN */}
+        {confirming && (
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <div className="px-5 pt-4 pb-2">
+              <h2 className="text-xl font-extrabold">Sahkan Pembelian 🧾</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Semak senarai sebelum simpan</p>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 space-y-2">
+              {items.map((it, idx) => (
+                <div key={idx} className="rounded-2xl bg-background border border-border p-3 flex items-center gap-2">
+                  <div className="flex-1">
+                    <div className="font-bold text-sm">{it.name}</div>
+                    <div className="text-xs text-muted-foreground">{it.qty} {it.unit}</div>
+                  </div>
+                  <div className="font-extrabold text-cost">RM {it.amount.toFixed(2)}</div>
+                </div>
+              ))}
+              <div className="rounded-2xl bg-cost/10 border border-cost/30 p-4 flex items-center justify-between mt-3">
+                <span className="font-bold uppercase tracking-wider text-xs">Jumlah Belanja</span>
+                <span className="font-extrabold text-cost text-xl">RM {totalSpent.toFixed(2)}</span>
               </div>
             </div>
-
-            <div className="px-5 pt-3 pb-6 shrink-0">
+            <div className="px-5 pt-3 pb-6 grid grid-cols-2 gap-2 shrink-0">
               <button
-                disabled={!cat}
-                onClick={handleSave}
-                className={`w-full h-14 rounded-2xl font-extrabold text-lg tap shadow-card transition-opacity bg-gradient-cost text-white ${!cat ? "opacity-50" : ""}`}
+                onClick={() => setConfirming(false)}
+                className="h-14 rounded-2xl bg-surface-elevated border border-border font-bold tap"
               >
-                Simpan & Kemaskini Stok 💾
+                ← Edit
               </button>
-              {!cat && <p className="text-center text-xs text-muted-foreground mt-2">Pilih kategori dahulu</p>}
+              <button
+                onClick={handleConfirmFinal}
+                className="h-14 rounded-2xl font-extrabold text-base tap shadow-card bg-gradient-profit text-profit-foreground"
+              >
+                Confirm ✅
+              </button>
             </div>
           </div>
-        ) : (
+        )}
+
+        {/* INCOME MODE */}
+        {mode === "in" && !confirming && (
           <>
             <div className="px-5 mt-5">
               <div className="rounded-3xl p-5 text-center bg-profit/10">
@@ -323,7 +427,7 @@ export const QuickInputModal = ({ onClose, onSave, onReceiptConfirm, onBoughtIte
             </div>
             <div className="px-5 mt-3 grid grid-cols-3 gap-2">
               {["1","2","3","4","5","6","7","8","9",".","0","del"].map(k => (
-                <button key={k} onClick={() => press(k)} className="h-12 rounded-2xl bg-surface-elevated text-xl font-bold tap grid place-items-center">
+                <button key={k} onClick={() => press(k, "income")} className="h-12 rounded-2xl bg-surface-elevated text-xl font-bold tap grid place-items-center">
                   {k === "del" ? <Delete className="w-5 h-5" /> : k}
                 </button>
               ))}
@@ -331,7 +435,7 @@ export const QuickInputModal = ({ onClose, onSave, onReceiptConfirm, onBoughtIte
             <div className="px-5 pt-3 pb-6">
               <button
                 disabled={parseFloat(amount) <= 0}
-                onClick={handleSave}
+                onClick={handleSaveIncome}
                 className={`w-full h-14 rounded-2xl font-extrabold text-lg tap shadow-card transition-opacity bg-gradient-profit text-profit-foreground ${parseFloat(amount) <= 0 ? "opacity-50" : ""}`}
               >
                 Simpan 💾
@@ -341,7 +445,7 @@ export const QuickInputModal = ({ onClose, onSave, onReceiptConfirm, onBoughtIte
         )}
 
         {success && (
-          <div className="absolute inset-0 bg-background/80 backdrop-blur grid place-items-center">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur grid place-items-center z-20">
             <div className="w-24 h-24 rounded-full bg-gradient-profit grid place-items-center animate-check-pop shadow-glow">
               <Check className="w-14 h-14 text-profit-foreground" strokeWidth={3} />
             </div>
@@ -351,11 +455,7 @@ export const QuickInputModal = ({ onClose, onSave, onReceiptConfirm, onBoughtIte
         {scanner && (
           <ReceiptScanner
             onClose={() => setScanner(false)}
-            onConfirm={(items) => {
-              onReceiptConfirm(items);
-              setScanner(false);
-              onClose();
-            }}
+            onConfirm={handleScannerConfirm}
           />
         )}
       </div>

@@ -410,7 +410,7 @@ const Index = () => {
           </div>
         </nav>
 
-        {modalOpen && <QuickInputModal onClose={() => setModalOpen(false)} onSave={(t) => { handleSaveTxn(t); setModalOpen(false); }} onReceiptConfirm={(items) => { handleReceiptConfirm(items); setModalOpen(false); }} onBoughtItems={handleBoughtItems} />}
+        {modalOpen && <QuickInputModal products={products} onClose={() => setModalOpen(false)} onSave={(t) => { handleSaveTxn(t); }} onReceiptConfirm={(items) => { handleReceiptConfirm(items); setModalOpen(false); }} onBoughtItems={handleBoughtItems} />}
         {exportOpen && <ExportSheet onClose={() => setExportOpen(false)} />}
         {settingsOpen && <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} profileName={profileName || "Boss"} businessName={businessName || "WarkahBiz"} onSaveProfile={saveProfile} onLogout={() => {}} />}
         {calcOpen && <PricingCalculator onClose={() => setCalcOpen(false)} businessName={businessName || profileName} onSave={() => setCalcOpen(false)} />}
