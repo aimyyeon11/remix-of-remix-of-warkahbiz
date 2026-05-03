@@ -31,6 +31,27 @@ export default {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
+        surface: {
+          DEFAULT: "hsl(var(--surface))",
+          elevated: "hsl(var(--surface-elevated))",
+          soft: "hsl(var(--surface-soft))",
+        },
+        profit: {
+          DEFAULT: "hsl(var(--profit))",
+          foreground: "hsl(var(--profit-foreground))",
+          glow: "hsl(var(--profit-glow))",
+        },
+        cost: {
+          DEFAULT: "hsl(var(--cost))",
+          foreground: "hsl(var(--cost-foreground))",
+          soft: "hsl(var(--cost-soft))",
+        },
+        warn: {
+          DEFAULT: "hsl(var(--warn))",
+          foreground: "hsl(var(--warn-foreground))",
+          soft: "hsl(var(--warn-soft))",
+        },
+        safe: "hsl(var(--safe))",
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
