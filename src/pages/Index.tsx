@@ -55,20 +55,7 @@ const Index = () => {
   const [businessName, setBusinessName] = useState(() => localStorage.getItem("warkahbiz_business_name") || "");
 
   const [txns, setTxns] = useLocalStorage<Txn[]>("warkahbiz_txns", []);
-  const [stock, setStock] = useLocalStorage<StockItem[]>("warkahbiz_stock", [
-    { id: "s-ayam", emoji: "🍗", name: "Ayam", qty: 0, unit: "kg", minQty: 1, restockQty: 3, maxQty: 10, category: "Bahan Mentah" },
-    { id: "s-telur", emoji: "🥚", name: "Telur", qty: 0, unit: "papan", minQty: 1, restockQty: 3, maxQty: 10, category: "Bahan Mentah" },
-    { id: "s-beras", emoji: "🍚", name: "Beras", qty: 0, unit: "kg", minQty: 5, restockQty: 10, maxQty: 25, category: "Bahan Mentah" },
-    { id: "s-minyak", emoji: "🛢️", name: "Minyak", qty: 0, unit: "liter", minQty: 1, restockQty: 3, maxQty: 10, category: "Bahan Mentah" },
-    { id: "s-tepung", emoji: "🌾", name: "Tepung", qty: 0, unit: "kg", minQty: 1, restockQty: 3, maxQty: 10, category: "Bahan Mentah" },
-    { id: "s-gula", emoji: "🥤", name: "Gula", qty: 0, unit: "kg", minQty: 1, restockQty: 3, maxQty: 10, category: "Bahan Mentah" },
-    { id: "s-garam", emoji: "🧂", name: "Garam", qty: 0, unit: "kg", minQty: 0.5, restockQty: 1, maxQty: 3, category: "Bahan Mentah" },
-    { id: "s-bawang", emoji: "🧅", name: "Bawang", qty: 0, unit: "kg", minQty: 0.5, restockQty: 2, maxQty: 5, category: "Bahan Mentah" },
-    { id: "s-cili", emoji: "🌶️", name: "Cili", qty: 0, unit: "kg", minQty: 0.5, restockQty: 1, maxQty: 3, category: "Bahan Mentah" },
-    { id: "s-santan", emoji: "🥛", name: "Santan", qty: 0, unit: "pek", minQty: 2, restockQty: 5, maxQty: 15, category: "Bahan Mentah" },
-    { id: "s-gas", emoji: "⛽", name: "Gas", qty: 0, unit: "tong", minQty: 0, restockQty: 1, maxQty: 2, category: "Lain-lain" },
-    { id: "s-bungkus", emoji: "📦", name: "Bungkus", qty: 0, unit: "pek", minQty: 2, restockQty: 5, maxQty: 20, category: "Pembungkusan" },
-  ]);
+  const [stock, setStock] = useLocalStorage<StockItem[]>("warkahbiz_stock", []);
   const [buy, setBuy] = useLocalStorage<BuyItem[]>("warkahbiz_buy", []);
   const [petty, setPetty] = useLocalStorage<PettyEntry[]>("warkahbiz_petty", [
     { id: 1, type: "in", desc: "Top-up dari jualan", emoji: "💵", amount: 200, time: "Isnin 9:00am", balance: 200 },
@@ -146,6 +133,13 @@ const Index = () => {
     setTxns((prev) => [...prev, { ...t, id: Date.now(), ts: Date.now(), time: nowTime(), createdAt: new Date().toISOString() }]);
   };
 
+  // Track the highest qty ever recorded for each stock item (used to auto-derive minQty)
+  const bumpPeak = (item: StockItem): StockItem => {
+    const peak = Math.max(item.maxQty ?? 0, item.qty);
+    const minQty = +(peak * 0.2).toFixed(2);
+    return { ...item, maxQty: peak, minQty };
+  };
+
   const handleReceiptConfirm = (items: ReceiptItem[]) => {
     const time = nowTime();
     const newTxns: Txn[] = items.map((r, i) => ({ id: Date.now() + i, ts: Date.now() + i, time, createdAt: new Date().toISOString(), type: "out", emoji: r.emoji, label: `Beli ${r.name}`, amount: r.price }));
@@ -156,13 +150,18 @@ const Index = () => {
   const handleBought = (id: string) => setBuy((prev) => prev.map((b) => b.id === id ? { ...b, done: !b.done } : b));
 
   const handleAdjustStock = (id: string, delta: number) => {
-    setStock((prev) => prev.map((s) => s.id !== id ? s : { ...s, qty: Math.max(0, +(s.qty + delta).toFixed(2)) }));
+    setStock((prev) => prev.map((s) => {
+      if (s.id !== id) return s;
+      const qty = Math.max(0, +(s.qty + delta).toFixed(2));
+      return bumpPeak({ ...s, qty });
+    }));
   };
 
   const handleSaveStock = (item: StockItem) => {
     setStock((prev) => {
+      const next = bumpPeak(item);
       const exists = prev.find((s) => s.id === item.id);
-      return exists ? prev.map((s) => s.id === item.id ? item : s) : [...prev, item];
+      return exists ? prev.map((s) => s.id === item.id ? next : s) : [...prev, next];
     });
     toast.success("Stok disimpan ✅");
   };
@@ -249,9 +248,40 @@ const Index = () => {
   };
 
   const handleSaveProduct = (p: Product) => {
+    const isFirstEver = products.length === 0;
     setProducts((prev) => {
       const exists = prev.find((x) => x.id === p.id);
       return exists ? prev.map((x) => x.id === p.id ? p : x) : [...prev, p];
+    });
+    if (isFirstEver) {
+      // Wipe stock, buy list, and purchase history
+      setStock([]);
+      setBuy([]);
+      setDismissedAuto(new Set());
+      setTxns((prev) => prev.filter((t) => !(t.type === "out" && t.label.startsWith("Beli "))));
+      toast.success("Profil produk disimpan. Data lama telah dipadamkan.");
+    }
+    // Seed stock entries from product ingredients (only those not yet tracked)
+    setStock((prev) => {
+      const next = [...prev];
+      (p.ingredients ?? []).forEach((ing) => {
+        const name = ing.name.trim();
+        if (!name) return;
+        const exists = next.find((s) => s.name.toLowerCase() === name.toLowerCase());
+        if (exists) return;
+        next.push({
+          id: `s-${ing.id}`,
+          emoji: "📦",
+          name,
+          qty: 0,
+          unit: ing.unit,
+          minQty: 0,
+          restockQty: Math.max(ing.quantity, 1),
+          maxQty: 0,
+          category: "Bahan Mentah",
+        });
+      });
+      return next;
     });
   };
 
@@ -277,7 +307,7 @@ const Index = () => {
   const handleBoughtItems = (items: Array<{ name: string; qty: number; unit: string; isOpEx?: boolean }>) => {
     const isMatch = (a: string, b: string) => { const x = a.toLowerCase().trim(); const y = b.toLowerCase().trim(); return x === y || x.includes(y) || y.includes(x); };
     items.forEach((item) => {
-      setStock(prev => { const idx = prev.findIndex(s => isMatch(s.name, item.name)); if (idx === -1) return prev; const updated = [...prev]; updated[idx] = { ...updated[idx], qty: +(updated[idx].qty + item.qty).toFixed(2) }; return updated; });
+      setStock(prev => { const idx = prev.findIndex(s => isMatch(s.name, item.name)); if (idx === -1) return prev; const updated = [...prev]; const merged = { ...updated[idx], qty: +(updated[idx].qty + item.qty).toFixed(2) }; updated[idx] = bumpPeak(merged); return updated; });
       setBuy(prev => prev.map(b => isMatch(b.name, item.name) && !b.done ? { ...b, done: true } : b));
     });
     toast.success(`${items.length} item dikemaskini dalam Stok & Senarai ✅`);

@@ -12,9 +12,9 @@ import { Slider } from "@/components/ui/slider";
 import { useTranslation } from "@/context/LanguageContext";
 import { estimateIngredientCost } from "@/server/estimateCost.functions";
 import { multiplierFor, tierFor, tierLabelKey } from "./profitScale";
-import type { Product, ProductIngredient, ProductPackaging, Unit } from "@/types";
+import type { Product, ProductIngredient, ProductPackaging, StockItem, Unit } from "@/types";
 
-const UNITS: Unit[] = ["kg", "g", "liter", "ml", "biji", "pek", "kotak", "batang", "helai", "tong", "papan", "kampit", "ekor", "unit", "pcs", "box", "pack", "dozen"];
+const UNITS: Unit[] = ["ekor", "kotak", "kg", "gram", "paket", "liter", "botol", "biji", "ikat", "tin", "bungkus", "sudu", "cawan"];
 const BATCH_UNITS = ["biji", "pcs", "servings", "kotak", "pek", "botol", "balang", "helai", "ketul"];
 
 const PRODUCT_CATEGORIES = ["Makanan", "Minuman", "Pek & Set", "Lain-lain"] as const;
@@ -43,11 +43,13 @@ function niceRound(price: number) {
 
 export const ProductsView = ({
   products,
+  stock = [],
   onSave,
   onDelete,
   onBack,
 }: {
   products: Product[];
+  stock?: StockItem[];
   onSave: (p: Product) => void;
   onDelete: (id: string) => void;
   onBack: () => void;
@@ -102,54 +104,77 @@ export const ProductsView = ({
       )}
 
       {products.length > 0 && (
-        <div className="px-5 space-y-2">
+        <div className="px-5 space-y-3">
           {products.map((p) => {
             const unitCost = p.costPerUnit ?? p.costPrice ?? 0;
             const price = p.suggestedPrice ?? p.sellingPrice ?? 0;
             const margin = price > 0 && unitCost > 0 ? Math.round(((price - unitCost) / price) * 100) : null;
             const batchSize = p.batchSize ?? 1;
             const batchUnit = p.batchUnit ?? "unit";
+            const ings = p.ingredients ?? [];
             return (
-              <div key={p.id} className="rounded-2xl bg-surface border border-border p-3 flex items-start gap-3">
-                <div className="text-3xl shrink-0">{p.emoji}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-extrabold text-sm leading-tight truncate">{p.name}</div>
-                  {p.category && (
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">{p.category}</div>
-                  )}
-                  <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                    {price > 0 && (
-                      <span className="font-extrabold text-profit text-sm">
-                        {fmt(price)}<span className="text-[10px] font-semibold opacity-70"> /{batchUnit}</span>
-                      </span>
+              <div key={p.id} className="rounded-2xl bg-surface border border-border p-3">
+                <div className="flex items-start gap-3">
+                  <div className="text-3xl shrink-0">{p.emoji}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-extrabold text-sm leading-tight truncate">{p.name}</div>
+                    {p.category && (
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">{p.category}</div>
                     )}
-                    {unitCost > 0 && <span className="text-[11px] text-muted-foreground">Kos: {fmt(unitCost)}</span>}
-                    {margin !== null && (
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                      {price > 0 && (
+                        <span className="font-extrabold text-profit text-sm">
+                          {fmt(price)}<span className="text-[10px] font-semibold opacity-70"> /{batchUnit}</span>
+                        </span>
+                      )}
+                      {unitCost > 0 && <span className="text-[11px] text-muted-foreground">Kos: {fmt(unitCost)}</span>}
+                      {margin !== null && (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                           margin >= 50 ? "bg-profit/15 text-profit"
                             : margin >= 30 ? "bg-warn/15 text-warn-foreground"
                             : "bg-cost/15 text-cost"
-                        }`}
-                      >
-                        {margin}% margin
-                      </span>
+                        }`}>{margin}% margin</span>
+                      )}
+                    </div>
+                    {batchSize > 1 && (
+                      <div className="text-[11px] text-muted-foreground mt-1">📦 1 batch = {batchSize} {batchUnit}</div>
                     )}
                   </div>
-                  <div className="text-[11px] text-muted-foreground mt-1 truncate flex items-center gap-2 flex-wrap">
-                    {p.ingredients && p.ingredients.length > 0 && <span>🥘 {p.ingredients.length} bahan</span>}
-                    {batchSize > 1 && <span>📦 1 batch = {batchSize} {batchUnit}</span>}
-                    {p.packaging && p.packaging.costPerUnit > 0 && <span>🎁 {fmt(p.packaging.costPerUnit)}/unit</span>}
+                  <div className="flex flex-col gap-1 shrink-0">
+                    <button onClick={() => openEdit(p)} className="w-9 h-9 rounded-xl bg-background border border-border grid place-items-center tap" aria-label="Edit">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => setDeleteConfirm(p.id)} className="w-9 h-9 rounded-xl bg-background border border-border grid place-items-center tap" aria-label="Padam">
+                      <Trash2 className="w-4 h-4 text-cost" />
+                    </button>
                   </div>
                 </div>
-                <div className="flex flex-col gap-1 shrink-0">
-                  <button onClick={() => openEdit(p)} className="w-9 h-9 rounded-xl bg-background border border-border grid place-items-center tap" aria-label="Edit">
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => setDeleteConfirm(p.id)} className="w-9 h-9 rounded-xl bg-background border border-border grid place-items-center tap" aria-label="Padam">
-                    <Trash2 className="w-4 h-4 text-cost" />
-                  </button>
-                </div>
+
+                {ings.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-border space-y-1.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      🥘 Bahan ({ings.length})
+                    </div>
+                    {ings.map((ing) => {
+                      const s = stock.find((x) => x.name.toLowerCase() === ing.name.trim().toLowerCase());
+                      const peak = s?.maxQty ?? 0;
+                      const minStock = +(peak * 0.2).toFixed(2);
+                      return (
+                        <div key={ing.id} className="flex items-center justify-between gap-2 text-[11px]">
+                          <div className="flex-1 min-w-0 truncate font-semibold">
+                            {ing.name || <span className="text-muted-foreground italic">(tanpa nama)</span>}
+                          </div>
+                          <div className="text-muted-foreground font-medium shrink-0">
+                            {ing.quantity} {ing.unit}
+                          </div>
+                          <div className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground shrink-0">
+                            Stok minimum: {minStock} {ing.unit}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
