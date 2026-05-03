@@ -1,7 +1,7 @@
 export type Tab = "today" | "bekalan" | "log" | "ai" | "profile";
 export type StockLevel = "habis" | "sedikit" | "cukup" | "banyak";
 export type TxnType = "in" | "out";
-export type Unit = "kg" | "g" | "liter" | "ml" | "biji" | "pek" | "kotak" | "batang" | "helai" | "tong" | "papan" | "kampit" | "ekor" | "unit" | "pcs" | "box" | "pack" | "dozen";
+export type Unit = "kg" | "g" | "gram" | "liter" | "ml" | "biji" | "pek" | "paket" | "kotak" | "batang" | "helai" | "tong" | "papan" | "kampit" | "ekor" | "unit" | "pcs" | "box" | "pack" | "dozen" | "botol" | "ikat" | "tin" | "bungkus" | "sudu" | "cawan";
 export type StockCategory = "Bahan Mentah" | "Minuman" | "Pembungkusan" | "Lain-lain";
 export const STOCK_CATEGORIES: StockCategory[] = ["Bahan Mentah", "Minuman", "Pembungkusan", "Lain-lain"];
 
@@ -78,10 +78,11 @@ export interface ReceiptItem {
 }
 
 export const UNIT_STEP: Record<Unit, number> = {
-  kg: 0.5, g: 50, liter: 0.5, ml: 100,
-  biji: 1, pek: 1, kotak: 1, batang: 1, helai: 1,
+  kg: 0.5, g: 50, gram: 50, liter: 0.5, ml: 100,
+  biji: 1, pek: 1, paket: 1, kotak: 1, batang: 1, helai: 1,
   tong: 1, papan: 1, kampit: 1, ekor: 1,
   unit: 1, pcs: 1, box: 1, pack: 1, dozen: 1,
+  botol: 1, ikat: 1, tin: 1, bungkus: 1, sudu: 1, cawan: 1,
 };
 
 export type OpExCategory =
