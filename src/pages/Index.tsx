@@ -362,7 +362,7 @@ const Index = () => {
                 <h2 className="text-xl font-extrabold tracking-tight">Stok 📦</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">Dikemaskini automatik bila dah belanja</p>
               </div>
-              <StockView stock={stock} onAdjust={handleAdjustStock} onSave={handleSaveStock} onDelete={handleDeleteStock} onGoToBuy={() => {}} />
+              <StockView stock={stock} products={products} onGoToBuy={() => {}} />
             </div>
           )}
           {tab === "log" && (
