@@ -1,0 +1,252 @@
+export type Tab = "today" | "bekalan" | "log" | "ai" | "profile";
+export type StockLevel = "habis" | "sedikit" | "cukup" | "banyak";
+export type TxnType = "in" | "out";
+export type Unit = "kg" | "g" | "liter" | "ml" | "biji" | "pek" | "kotak" | "batang" | "helai" | "tong" | "papan" | "kampit" | "ekor" | "unit" | "pcs" | "box" | "pack" | "dozen";
+export type StockCategory = "Bahan Mentah" | "Minuman" | "Pembungkusan" | "Lain-lain";
+export const STOCK_CATEGORIES: StockCategory[] = ["Bahan Mentah", "Minuman", "Pembungkusan", "Lain-lain"];
+
+export interface Txn {
+  id: number;
+  type: TxnType;
+  emoji: string;
+  label: string;
+  amount: number;
+  time: string; // display
+  ts: number;   // sort
+  createdAt?: string; // ISO date string
+}
+
+export interface BuyItem {
+  id: string;
+  emoji: string;
+  name: string;
+  cost: number;
+  currentQty: number;
+  recQty: number;
+  unit: Unit;
+  daysCover: number;
+  reason: string;
+  done: boolean;
+  removing?: boolean;
+  source?: "auto" | "manual";
+  note?: string;
+}
+
+export interface StockItem {
+  id: string;
+  emoji: string;
+  name: string;
+  qty: number;
+  unit: Unit;
+  minQty: number;
+  restockQty: number;
+  maxQty?: number;
+  category?: StockCategory;
+}
+
+export interface SafeStockItem {
+  id: string;
+  emoji: string;
+  name: string;
+  qty: number;
+  unit: Unit;
+  dailyUsage: number;
+}
+
+export interface ChatMsg {
+  id: number;
+  from: "user" | "bot";
+  text: string;
+}
+
+export interface PettyEntry {
+  id: number;
+  type: "in" | "out";
+  desc: string;
+  emoji: string;
+  amount: number;
+  time: string;
+  balance: number;
+}
+
+export interface ReceiptItem {
+  emoji: string;
+  name: string;
+  qty: number;
+  unit: Unit;
+  price: number;
+}
+
+export const UNIT_STEP: Record<Unit, number> = {
+  kg: 0.5, g: 50, liter: 0.5, ml: 100,
+  biji: 1, pek: 1, kotak: 1, batang: 1, helai: 1,
+  tong: 1, papan: 1, kampit: 1, ekor: 1,
+  unit: 1, pcs: 1, box: 1, pack: 1, dozen: 1,
+};
+
+export type OpExCategory =
+  | "Kos Bahan"
+  | "Utiliti"
+  | "Pembungkusan"
+  | "Gaji"
+  | "Pengangkutan"
+  | "Lain-lain";
+
+export const OPEX_CATEGORIES: OpExCategory[] = [
+  "Kos Bahan", "Utiliti", "Pembungkusan", "Gaji", "Pengangkutan", "Lain-lain",
+];
+
+export const OPEX_EMOJI: Record<OpExCategory, string> = {
+  "Kos Bahan":    "🥩",
+  "Utiliti":      "💡",
+  "Pembungkusan": "📦",
+  "Gaji":         "👷",
+  "Pengangkutan": "🚚",
+  "Lain-lain":    "🏷️",
+};
+
+export interface OpExEntry {
+  id: number;
+  category: OpExCategory;
+  desc: string;
+  amount: number;
+  time: string;
+  ts: number;
+  createdAt: string;
+  paidFromPetty: boolean;
+}
+
+export interface ProductIngredient {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: Unit;
+  predictedCost?: number;
+  manualCost?: boolean;
+}
+
+export interface ProductPackaging {
+  type: string;
+  costPerUnit: number;
+}
+
+export interface Product {
+  id: string;
+  emoji: string;
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  ingredients?: ProductIngredient[];
+  // Batch definition
+  batchSize?: number;          // e.g. 24
+  batchUnit?: string;          // e.g. "biji", "pcs", "servings"
+  // Packaging per single unit
+  packaging?: ProductPackaging;
+  // Target profit scale 1-10
+  targetProfitScale?: number;
+  // Derived
+  totalCost?: number;          // total batch cost (ingredients only)
+  costPerUnit?: number;        // (totalCost / batchSize) + packaging.costPerUnit
+  suggestedPrice?: number;     // per unit
+  margin?: number;             // %
+  // Legacy / optional
+  sellingPrice?: number;
+  costPrice?: number;
+  category?: string;
+  note?: string;
+}
+
+export type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+export const DAY_KEYS: DayKey[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+export interface DayHours {
+  day: DayKey;
+  open: string;          // "HH:mm"
+  close: string;         // "HH:mm"
+  isClosed: boolean;
+  // optional split (e.g. lunch break)
+  hasSplit?: boolean;
+  splitOpen?: string;
+  splitClose?: string;
+}
+
+export interface BusinessHoursSettings {
+  hours: DayHours[];
+  vacationMode: boolean;
+  vacationFrom?: string;  // ISO date
+  vacationTo?: string;    // ISO date
+  autoReplyEnabled: boolean;
+  autoReplyMessage?: string;
+  bufferMinutes: number;  // 0 - 120
+}
+
+export type SupplierCategory =
+  | "Bahan Mentah"
+  | "Minuman"
+  | "Pembungkusan"
+  | "Gas & Utiliti"
+  | "Lain-lain";
+
+export const SUPPLIER_CATEGORIES: SupplierCategory[] = [
+  "Bahan Mentah", "Minuman", "Pembungkusan", "Gas & Utiliti", "Lain-lain",
+];
+
+export interface Supplier {
+  id: string;
+  name: string;
+  category: SupplierCategory;
+  phone: string;
+  items: string;
+  note?: string;
+}
+
+export type OutletType =
+  | "Gerai"
+  | "Kedai Lot"
+  | "Kiosk"
+  | "Lori Makanan"
+  | "Online Sahaja"
+  | "Lain-lain";
+
+export const OUTLET_TYPES: OutletType[] = [
+  "Gerai", "Kedai Lot", "Kiosk", "Lori Makanan", "Online Sahaja", "Lain-lain",
+];
+
+export interface OutletSettings {
+  outletName: string;
+  type: OutletType;
+  address: string;
+  isOpenToday: boolean;
+  closedReason?: string;
+}
+
+export const DEFAULT_OUTLET: OutletSettings = {
+  outletName: "",
+  type: "Gerai",
+  address: "",
+  isOpenToday: true,
+};
+
+export type PaymentMethodType = "card" | "ewallet" | "bank";
+
+export interface SavedCard {
+  id: string;
+  type: PaymentMethodType;
+  // Card fields
+  cardNumber?: string;
+  cardHolder?: string;
+  expiryMonth?: string;
+  expiryYear?: string;
+  network?: "visa" | "mastercard" | "amex" | "unknown";
+  // E-wallet fields
+  ewalletProvider?: string;
+  ewalletPhone?: string;
+  // Bank account fields
+  bankName?: string;
+  accountNumber?: string;
+  accountHolder?: string;
+  // Shared
+  nickname?: string;
+  isPrimary?: boolean;
+  createdAt: string;
+}
