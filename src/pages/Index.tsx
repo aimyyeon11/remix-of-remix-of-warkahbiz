@@ -248,9 +248,40 @@ const Index = () => {
   };
 
   const handleSaveProduct = (p: Product) => {
+    const isFirstEver = products.length === 0;
     setProducts((prev) => {
       const exists = prev.find((x) => x.id === p.id);
       return exists ? prev.map((x) => x.id === p.id ? p : x) : [...prev, p];
+    });
+    if (isFirstEver) {
+      // Wipe stock, buy list, and purchase history
+      setStock([]);
+      setBuy([]);
+      setDismissedAuto(new Set());
+      setTxns((prev) => prev.filter((t) => !(t.type === "out" && t.label.startsWith("Beli "))));
+      toast.success("Profil produk disimpan. Data lama telah dipadamkan.");
+    }
+    // Seed stock entries from product ingredients (only those not yet tracked)
+    setStock((prev) => {
+      const next = [...prev];
+      (p.ingredients ?? []).forEach((ing) => {
+        const name = ing.name.trim();
+        if (!name) return;
+        const exists = next.find((s) => s.name.toLowerCase() === name.toLowerCase());
+        if (exists) return;
+        next.push({
+          id: `s-${ing.id}`,
+          emoji: "📦",
+          name,
+          qty: 0,
+          unit: ing.unit,
+          minQty: 0,
+          restockQty: Math.max(ing.quantity, 1),
+          maxQty: 0,
+          category: "Bahan Mentah",
+        });
+      });
+      return next;
     });
   };
 
