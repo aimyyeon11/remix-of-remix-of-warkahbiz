@@ -12,7 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { useTranslation } from "@/context/LanguageContext";
 import { estimateIngredientCost } from "@/server/estimateCost.functions";
 import { multiplierFor, tierFor, tierLabelKey } from "./profitScale";
-import type { Product, ProductIngredient, ProductPackaging, Unit } from "@/types";
+import type { Product, ProductIngredient, ProductPackaging, StockItem, Unit } from "@/types";
 
 const UNITS: Unit[] = ["ekor", "kotak", "kg", "gram", "paket", "liter", "botol", "biji", "ikat", "tin", "bungkus", "sudu", "cawan"];
 const BATCH_UNITS = ["biji", "pcs", "servings", "kotak", "pek", "botol", "balang", "helai", "ketul"];
@@ -43,11 +43,13 @@ function niceRound(price: number) {
 
 export const ProductsView = ({
   products,
+  stock = [],
   onSave,
   onDelete,
   onBack,
 }: {
   products: Product[];
+  stock?: StockItem[];
   onSave: (p: Product) => void;
   onDelete: (id: string) => void;
   onBack: () => void;
