@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import { Check, Share2 } from "lucide-react";
 import type { BuyItem, StockItem, Product, Unit } from "@/types";
 
@@ -20,10 +20,23 @@ export const BuyView = ({
   onClearCompleted?: () => void;
   onGoToStock?: () => void;
 }) => {
-  // Build text from current manual items, preserving order: undone first, done last
   const undone = buy.filter((b) => !b.done);
   const done = buy.filter((b) => b.done);
-  const noteText = undone.map((b) => b.name).join("\n");
+
+  const inputsRef = useRef<Record<string, HTMLInputElement | null>>({});
+  const focusIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (focusIdRef.current) {
+      const el = inputsRef.current[focusIdRef.current];
+      if (el) {
+        el.focus();
+        const len = el.value.length;
+        el.setSelectionRange(len, len);
+      }
+      focusIdRef.current = null;
+    }
+  });
 
   const lowStockSuggestions = useMemo(() => {
     if (!products.length) return [];
@@ -41,29 +54,55 @@ export const BuyView = ({
     });
   }, [products, stock]);
 
-  const handleNoteChange = (val: string) => {
-    const lines = val.split("\n").map((l) => l.trim()).filter(Boolean);
-    const newUndone: BuyItem[] = lines.map((line, i) => {
-      const existing = buy.find(
-        (b) => !b.done && b.name.toLowerCase() === line.toLowerCase(),
-      );
-      return (
-        existing ?? {
-          id: `m-${Date.now()}-${i}`,
-          emoji: "🛒",
-          name: line,
-          cost: 0,
-          currentQty: 0,
-          recQty: 1,
-          unit: "biji" as Unit,
-          daysCover: 0,
-          reason: "",
-          done: false,
-          source: "manual" as const,
-        }
-      );
-    });
-    onSyncNotepad([...newUndone, ...done]);
+  const newItem = (name: string): BuyItem => ({
+    id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    emoji: "🛒",
+    name,
+    cost: 0,
+    currentQty: 0,
+    recQty: 1,
+    unit: "biji" as Unit,
+    daysCover: 0,
+    reason: "",
+    done: false,
+    source: "manual" as const,
+  });
+
+  const updateName = (id: string, name: string) => {
+    onSyncNotepad(buy.map((b) => (b.id === id ? { ...b, name } : b)));
+  };
+
+  const removeItem = (id: string) => {
+    onSyncNotepad(buy.filter((b) => b.id !== id));
+  };
+
+  const addAfter = (id: string | null) => {
+    const item = newItem("");
+    focusIdRef.current = item.id;
+    if (id == null) {
+      onSyncNotepad([...buy, item]);
+      return;
+    }
+    const idx = buy.findIndex((b) => b.id === id);
+    const next = [...buy];
+    next.splice(idx + 1, 0, item);
+    onSyncNotepad(next);
+  };
+
+  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>, b: BuyItem) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addAfter(b.id);
+    } else if (e.key === "Backspace" && b.name === "") {
+      e.preventDefault();
+      const list = buy;
+      const idx = list.findIndex((x) => x.id === b.id);
+      const prev = list.slice(0, idx).reverse().find((x) => true);
+      removeItem(b.id);
+      if (prev) {
+        focusIdRef.current = prev.id;
+      }
+    }
   };
 
   const share = () => {
@@ -95,6 +134,36 @@ export const BuyView = ({
   const total = buy.length;
   const doneCount = done.length;
 
+  const renderRow = (b: BuyItem) => (
+    <div
+      key={b.id}
+      className="flex items-center gap-3 px-3 py-1.5 rounded-lg hover:bg-surface-elevated/60 group"
+    >
+      <button
+        onClick={() => onToggleDone(b.id)}
+        aria-label={b.done ? "Untick" : "Tick"}
+        className={`w-5 h-5 rounded border-2 grid place-items-center shrink-0 tap ${
+          b.done ? "bg-profit border-profit text-profit-foreground" : "border-border"
+        }`}
+      >
+        {b.done && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
+      </button>
+      <input
+        ref={(el) => (inputsRef.current[b.id] = el)}
+        value={b.name}
+        onChange={(e) => updateName(b.id, e.target.value)}
+        onKeyDown={(e) => handleKey(e, b)}
+        onBlur={() => {
+          if (b.name.trim() === "") removeItem(b.id);
+        }}
+        placeholder="Tulis item..."
+        className={`flex-1 bg-transparent text-sm font-medium focus:outline-none placeholder:text-muted-foreground/40 ${
+          b.done ? "line-through text-muted-foreground" : ""
+        }`}
+      />
+    </div>
+  );
+
   return (
     <div className="px-5 pt-6 space-y-4 pb-32">
       <header className="animate-fade-in">
@@ -112,73 +181,59 @@ export const BuyView = ({
       <div className="rounded-2xl border border-border bg-surface overflow-hidden">
         <div className="px-4 py-2 border-b border-border bg-surface-elevated flex items-center gap-2">
           <span className="text-xs font-bold text-muted-foreground">📝 Senarai Nak Beli</span>
-          <span className="ml-auto text-[10px] text-muted-foreground">
-            satu item satu baris
-          </span>
+          <span className="ml-auto text-[10px] text-muted-foreground">tap untuk edit</span>
         </div>
 
-        <textarea
-          value={noteText}
-          onChange={(e) => handleNoteChange(e.target.value)}
-          placeholder={"ayam dua ekor\nikan 1 kg\nbawang merah\n..."}
-          className="w-full min-h-[140px] p-4 bg-transparent text-sm font-medium resize-none focus:outline-none placeholder:text-muted-foreground/40 font-mono"
-          style={{ lineHeight: "1.75rem" }}
-        />
+        <div
+          className="py-2 min-h-[160px]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) addAfter(null);
+          }}
+        >
+          {undone.length === 0 && done.length === 0 && (
+            <button
+              onClick={() => addAfter(null)}
+              className="w-full text-left px-5 py-3 text-sm text-muted-foreground/50"
+            >
+              Tap di sini untuk mula tambah item...
+            </button>
+          )}
 
-        {undone.length > 0 && (
-          <div className="px-2 pb-2 space-y-1 border-t border-border pt-2">
-            {undone.map((b) => (
-              <button
-                key={b.id}
-                onClick={() => onToggleDone(b.id)}
-                className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-surface-elevated tap text-left"
-              >
-                <span className="w-5 h-5 rounded border-2 border-border grid place-items-center shrink-0" />
-                <span className="text-sm font-medium flex-1 truncate">{b.name}</span>
-              </button>
-            ))}
-          </div>
-        )}
+          {undone.map(renderRow)}
 
-        {done.length > 0 && (
-          <div className="px-2 pb-2 space-y-1 border-t border-border pt-2">
-            <div className="px-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-              Sudah Beli
+          {done.length > 0 && (
+            <>
+              <div className="px-5 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Sudah Beli
+              </div>
+              {done.map(renderRow)}
+            </>
+          )}
+
+          {lowStockSuggestions.length > 0 && (
+            <div className="mx-3 mt-3 pt-3 border-t border-border/60">
+              <div className="px-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                Cadangan stok rendah:
+              </div>
+              <ul className="px-2 pb-1 space-y-0.5">
+                {lowStockSuggestions.map((s) => (
+                  <li key={s.id} className="text-xs text-muted-foreground">
+                    • {s.name} — <span className="text-warn font-semibold">stok rendah</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            {done.map((b) => (
-              <button
-                key={b.id}
-                onClick={() => onToggleDone(b.id)}
-                className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-surface-elevated tap text-left"
-              >
-                <span className="w-5 h-5 rounded bg-profit border-2 border-profit grid place-items-center shrink-0 text-profit-foreground">
-                  <Check className="w-3.5 h-3.5" strokeWidth={3} />
-                </span>
-                <span className="text-sm font-medium line-through text-muted-foreground flex-1 truncate">
-                  {b.name}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {lowStockSuggestions.length > 0 && (
-          <div className="px-4 py-3 border-t border-border bg-surface-elevated/50">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-              Cadangan stok rendah:
-            </div>
-            <ul className="space-y-0.5">
-              {lowStockSuggestions.map((s) => (
-                <li key={s.id} className="text-xs text-muted-foreground">
-                  • {s.name} — <span className="text-warn font-semibold">stok rendah</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+          )}
+        </div>
 
         <div className="px-4 pb-3 pt-2 flex items-center gap-2 border-t border-border">
-          <span className="text-[10px] text-muted-foreground">
+          <button
+            onClick={() => addAfter(null)}
+            className="h-8 px-3 rounded-xl bg-surface-elevated text-xs font-bold tap"
+          >
+            + Tambah
+          </button>
+          <span className="text-[10px] text-muted-foreground ml-1">
             {undone.length} item belum dibeli
           </span>
           <button
