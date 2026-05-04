@@ -352,16 +352,8 @@ const Index = () => {
           )}
           {tab === "bekalan" && (
             <div className="pb-32">
-              <div className="px-5 pt-6 pb-2">
-                <h2 className="text-xl font-extrabold tracking-tight">Nak Beli 🛒</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">AI cadangkan stok rendah secara automatik</p>
-              </div>
               <BuyView buy={buy} stock={stock} products={products} onToggleDone={handleBought} onResync={handleResync} onBulkDone={handleBulkDone} onBulkDelete={handleBulkDelete} onClearCompleted={handleClearCompleted} onSyncNotepad={handleSyncNotepad} onGoToStock={() => {}} />
               <div className="mx-5 my-4 border-t border-border" />
-              <div className="px-5 pb-2">
-                <h2 className="text-xl font-extrabold tracking-tight">Stok 📦</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">Dikemaskini automatik bila dah belanja</p>
-              </div>
               <StockView stock={stock} products={products} onGoToBuy={() => {}} />
             </div>
           )}
