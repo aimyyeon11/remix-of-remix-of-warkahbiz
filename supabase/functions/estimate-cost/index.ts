@@ -42,19 +42,30 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "invalid_input", cost: 0 }, 400);
     }
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: `Estimate market cost for: ${body.quantity} ${body.unit} of ${body.name}` },
-        ],
-        tools: [TOOL_SCHEMA],
-        tool_choice: { type: "function", function: { name: "return_estimate" } },
-      }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    let res: Response;
+    try {
+      res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-lite",
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: `Estimate market cost for: ${body.quantity} ${body.unit} of ${body.name}` },
+          ],
+          tools: [TOOL_SCHEMA],
+          tool_choice: { type: "function", function: { name: "return_estimate" } },
+        }),
+      });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      console.error("estimate-cost fetch aborted/failed", err);
+      return json({ ok: false, error: "timeout", cost: 0 });
+    }
+    clearTimeout(timeoutId);
 
     if (!res.ok) {
       const t = await res.text().catch(() => "");
