@@ -70,7 +70,7 @@ export const BuyView = ({
   });
 
   const updateName = (id: string, name: string) => {
-    onSyncNotepad(buy.map((b) => (b.id === id ? { ...b, name } : b)));
+    onSyncNotepad(buy.map((b) => (b.id === id ? { ...b, name, emoji: emojiForItem(name) || b.emoji } : b)));
   };
 
   const removeItem = (id: string) => {
