@@ -42,6 +42,19 @@ export interface StockItem {
   restockQty: number;
   maxQty?: number;
   category?: StockCategory;
+  lastRestockedAt?: string;
+  lastUsedAt?: string;
+}
+
+export interface CookingLog {
+  id: number;
+  ts: number;
+  createdAt: string;
+  productId: string;
+  productName: string;
+  productEmoji: string;
+  batches: number;
+  batchUnit: string;
 }
 
 export interface SafeStockItem {
