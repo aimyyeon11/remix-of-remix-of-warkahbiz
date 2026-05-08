@@ -311,7 +311,7 @@ const Index = () => {
         if (exists) return;
         next.push({
           id: `s-${ing.id}`,
-          emoji: "📦",
+          emoji: emojiForItem(name),
           name,
           qty: 0,
           unit: ing.unit,
