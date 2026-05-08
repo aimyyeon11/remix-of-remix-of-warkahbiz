@@ -345,6 +345,7 @@ const Index = () => {
 
   const handleBoughtItems = (items: Array<{ name: string; qty: number; unit: string; isOpEx?: boolean }>) => {
     const isMatch = (a: string, b: string) => { const x = a.toLowerCase().trim(); const y = b.toLowerCase().trim(); return x === y || x.includes(y) || y.includes(x); };
+    const nowIso = new Date().toISOString();
     items.forEach((item) => {
       setStock(prev => {
         const idx = prev.findIndex(s => isMatch(s.name, item.name));
@@ -360,11 +361,12 @@ const Index = () => {
             restockQty: 0,
             maxQty: item.qty,
             category: "Bahan Mentah",
+            lastRestockedAt: nowIso,
           };
           return [...prev, newItem];
         }
         const updated = [...prev];
-        const merged = { ...updated[idx], qty: +(updated[idx].qty + item.qty).toFixed(2) };
+        const merged = { ...updated[idx], qty: +(updated[idx].qty + item.qty).toFixed(2), lastRestockedAt: nowIso };
         updated[idx] = bumpPeak(merged);
         return updated;
       });
