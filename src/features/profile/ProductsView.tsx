@@ -945,12 +945,28 @@ const IngredientCard = ({
     <Card className="rounded-2xl">
       <CardContent className="p-3 space-y-2">
         <div className="flex items-center gap-2">
-          <Input
-            value={ingredient.name}
-            onChange={(e) => onChange({ name: e.target.value, manualCost: false })}
-            placeholder={t("ingredientName")}
-            className="h-11 flex-1 rounded-xl"
-          />
+          <div className="flex-1 relative">
+            <Input
+              list="stock-name-suggestions"
+              value={ingredient.name}
+              onChange={(e) => {
+                const newName = e.target.value;
+                const match = stock.find((s) => s.name.trim().toLowerCase() === newName.trim().toLowerCase());
+                if (match) {
+                  onChange({ name: newName, unit: match.unit, manualCost: false });
+                } else {
+                  onChange({ name: newName, manualCost: false });
+                }
+              }}
+              placeholder="Cari atau taip nama bahan…"
+              className="h-11 rounded-xl pr-16"
+            />
+            {matchedStock && (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-profit/15 text-profit">
+                ✓ stok
+              </span>
+            )}
+          </div>
           <button
             onClick={onRemove}
             className="w-11 h-11 grid place-items-center rounded-xl bg-cost-soft text-cost tap"
