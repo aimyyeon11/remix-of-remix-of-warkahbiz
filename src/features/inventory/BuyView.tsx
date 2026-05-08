@@ -57,7 +57,7 @@ export const BuyView = ({
 
   const newItem = (name: string): BuyItem => ({
     id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    emoji: "🛒",
+    emoji: emojiForItem(name) || "🛒",
     name,
     cost: 0,
     currentQty: 0,
