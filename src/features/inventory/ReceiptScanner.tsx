@@ -21,6 +21,33 @@ const fileToDataUrl = (f: File) =>
   });
 
 type Classification = "stock" | "personal";
+const MONEY_TOLERANCE = 0.10;
+
+const roundMoney = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
+const sumReceiptItems = (list: ReceiptItem[]) => roundMoney(list.reduce((sum, item) => sum + item.price, 0));
+
+const distributeIncludedTax = (list: ReceiptItem[], amount: number): ReceiptItem[] => {
+  const centsToAdd = Math.round(amount * 100);
+  if (!list.length || centsToAdd <= 0) return list;
+
+  const baseCents = list.map((item) => Math.round(item.price * 100));
+  const totalCents = baseCents.reduce((sum, cents) => sum + Math.max(cents, 0), 0);
+  const weighted = list.map((_, idx) => {
+    const weight = totalCents > 0 ? Math.max(baseCents[idx], 0) / totalCents : 1 / list.length;
+    const exact = weight * centsToAdd;
+    return { idx, cents: Math.floor(exact), fraction: exact - Math.floor(exact) };
+  });
+  let allocated = weighted.reduce((sum, item) => sum + item.cents, 0);
+  weighted.sort((a, b) => b.fraction - a.fraction).forEach((item) => {
+    if (allocated < centsToAdd) {
+      item.cents += 1;
+      allocated += 1;
+    }
+  });
+
+  const addByIndex = new Map(weighted.map((item) => [item.idx, item.cents]));
+  return list.map((item, idx) => ({ ...item, price: roundMoney(item.price + (addByIndex.get(idx) || 0) / 100) }));
+};
 
 export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
   onClose: () => void;
@@ -37,6 +64,7 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
   const [items, setItems] = useState<ReceiptItem[]>([]);
   const [errMsg, setErrMsg] = useState<string>("");
   const [mismatchWarn, setMismatchWarn] = useState<null | { sum: number; receipt: number; diff: number }>(null);
+  const [includedTaxAdjustment, setIncludedTaxAdjustment] = useState<null | { amount: number; rawSum: number; adjustedSum: number }>(null);
 
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -66,6 +94,7 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
     if (!imageUrl) return;
     setPhase("scanning");
     setMismatchWarn(null);
+    setIncludedTaxAdjustment(null);
     try {
       const result = await scanReceipt({ data: { imageBase64: imageUrl, mimeType: "image/jpeg", knownIngredients } });
       if (!result.ok) {
@@ -73,13 +102,18 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
         setPhase("error");
         return;
       }
-      const parsed: ReceiptItem[] = (result.items || []).map((i) => ({
+      const rawParsed: ReceiptItem[] = (result.items || []).map((i) => ({
         emoji: i.emoji || "🛒",
         name: i.name || "Item",
         qty: Number(i.qty) || 1,
         unit: normalizeUnit(i.unit),
-        price: Number(i.price) || 0,
+        price: roundMoney(Number(i.price) || 0),
       }));
+      const printedTotal = roundMoney(result.total || 0);
+      const printedTax = roundMoney(result.tax || 0);
+      const rawSum = sumReceiptItems(rawParsed);
+      const missingIncludedTax = printedTotal > 0 && printedTax > 0 && Math.abs(roundMoney(rawSum + printedTax - printedTotal)) <= MONEY_TOLERANCE && Math.abs(rawSum - printedTotal) > MONEY_TOLERANCE;
+      const parsed = missingIncludedTax ? distributeIncludedTax(rawParsed, printedTax) : rawParsed;
       if (parsed.length === 0) {
         setErrMsg("Tiada item dijumpai. Cuba gambar yang lebih jelas.");
         setPhase("error");
@@ -87,16 +121,19 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
       }
       setVendor(result.vendor);
       setDate(result.date);
-      setTax(result.tax || 0);
-      setReceiptTotal(result.total || 0);
+      setTax(printedTax);
+      setReceiptTotal(printedTotal);
       setItems(parsed);
+      if (missingIncludedTax) {
+        setIncludedTaxAdjustment({ amount: printedTax, rawSum, adjustedSum: sumReceiptItems(parsed) });
+      }
 
       // Tax is already included in printed total (Malaysian SST/GST is a breakdown).
       // Compare sum of items directly against printed total. Tolerance: RM 0.10.
-      const sum = parsed.reduce((s, i) => s + i.price, 0);
-      const diff = Math.abs(sum - (result.total || 0));
-      if ((result.total || 0) > 0 && diff > 0.10) {
-        setMismatchWarn({ sum, receipt: result.total || 0, diff });
+      const sum = sumReceiptItems(parsed);
+      const diff = Math.abs(roundMoney(sum - printedTotal));
+      if (printedTotal > 0 && diff > MONEY_TOLERANCE) {
+        setMismatchWarn({ sum, receipt: printedTotal, diff });
       }
       setPhase("result");
     } catch (e) {
@@ -106,7 +143,7 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
     }
   };
 
-  const itemsTotal = items.reduce((s, i) => s + i.price, 0);
+  const itemsTotal = sumReceiptItems(items);
   const total = receiptTotal > 0 ? receiptTotal : itemsTotal;
 
   return (
@@ -200,13 +237,18 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
             </div>
             <div className="mt-3 border-t border-border pt-3 space-y-1 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Subtotal item</span>
+                <span className="text-muted-foreground">Jumlah item</span>
                 <span className="font-semibold">RM {itemsTotal.toFixed(2)}</span>
               </div>
               {tax > 0 && (
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Termasuk cukai</span>
+                  <span className="text-muted-foreground">Cukai termasuk</span>
                   <span className="font-semibold">RM {tax.toFixed(2)}</span>
+                </div>
+              )}
+              {includedTaxAdjustment && (
+                <div className="rounded-xl bg-profit/10 border border-profit/30 p-2 text-xs leading-relaxed">
+                  Cukai pada resit ialah pecahan dalam jumlah. Item telah diselaraskan dari RM {includedTaxAdjustment.rawSum.toFixed(2)} ke RM {includedTaxAdjustment.adjustedSum.toFixed(2)} supaya sama dengan jumlah resit — cukai tidak ditambah dua kali.
                 </div>
               )}
               <div className="flex items-center justify-between pt-1 border-t border-border">
@@ -225,7 +267,7 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
                     Jumlah tidak sepadan
                   </div>
                   <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Subtotal item = <b>RM {mismatchWarn.sum.toFixed(2)}</b> tetapi total resit = <b>RM {mismatchWarn.receipt.toFixed(2)}</b> (beza <b>RM {mismatchWarn.diff.toFixed(2)}</b>). Semak harga setiap item — mungkin ada yang tersalah baca (cth. RM 6.90 jadi RM 6.09).
+                    Jumlah item termasuk cukai = <b>RM {mismatchWarn.sum.toFixed(2)}</b> tetapi total resit = <b>RM {mismatchWarn.receipt.toFixed(2)}</b> (beza <b>RM {mismatchWarn.diff.toFixed(2)}</b>). Semak harga setiap item — mungkin ada yang tersalah baca (cth. RM 6.90 jadi RM 6.09).
                   </div>
                 </div>
               </div>
