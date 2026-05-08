@@ -380,6 +380,7 @@ const ProductDialog = ({
               <IngredientsStep
                 ingredients={ingredients}
                 setIngredients={setIngredients}
+                stock={stock}
               />
               <div className="mt-5 pt-5 border-t border-border">
                 <PackagingBlock
