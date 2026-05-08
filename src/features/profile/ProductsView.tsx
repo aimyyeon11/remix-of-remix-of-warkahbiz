@@ -185,6 +185,7 @@ export const ProductsView = ({
         key={editing?.id ?? "new"}
         open={sheetOpen}
         initial={editing}
+        stock={stock}
         onClose={() => setSheetOpen(false)}
         onSave={(p) => {
           onSave(p);
@@ -218,11 +219,13 @@ type Step = 1 | 2 | 3;
 const ProductDialog = ({
   open,
   initial,
+  stock = [],
   onClose,
   onSave,
 }: {
   open: boolean;
   initial: Product | null;
+  stock?: StockItem[];
   onClose: () => void;
   onSave: (p: Product) => void;
 }) => {
@@ -377,6 +380,7 @@ const ProductDialog = ({
               <IngredientsStep
                 ingredients={ingredients}
                 setIngredients={setIngredients}
+                stock={stock}
               />
               <div className="mt-5 pt-5 border-t border-border">
                 <PackagingBlock
@@ -509,13 +513,20 @@ const BatchDefinitionBlock = ({
           />
         </Field>
         <Field label={t("batchUnitLabel")}>
-          <select
+          <Input
+            list="batch-unit-suggestions"
             value={batchUnit}
             onChange={(e) => setBatchUnit(e.target.value)}
-            className="w-full h-12 px-4 rounded-2xl bg-background border border-input text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            {BATCH_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-          </select>
+            placeholder="periuk, tray, loyang…"
+            className="h-12 rounded-2xl text-base font-semibold"
+          />
+          <datalist id="batch-unit-suggestions">
+            {BATCH_UNITS.map((u) => <option key={u} value={u} />)}
+            <option value="periuk" />
+            <option value="tray" />
+            <option value="loyang" />
+            <option value="bungkus" />
+          </datalist>
         </Field>
       </div>
     </div>
@@ -777,17 +788,30 @@ const BasicInfoStep = ({
 const IngredientsStep = ({
   ingredients,
   setIngredients,
+  stock = [],
 }: {
   ingredients: ProductIngredient[];
   setIngredients: React.Dispatch<React.SetStateAction<ProductIngredient[]>>;
+  stock?: StockItem[];
 }) => {
   const { t } = useTranslation();
 
   const add = () => {
     setIngredients((prev) => [
       ...prev,
-      { id: `ing-${Date.now()}`, name: "", quantity: 1, unit: "unit" as Unit, predictedCost: undefined },
+      { id: `ing-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, name: "", quantity: 1, unit: "unit" as Unit, predictedCost: undefined },
     ]);
+  };
+
+  const addMany = (n: number) => {
+    setIngredients((prev) => {
+      const base = Date.now();
+      const next = [...prev];
+      for (let i = 0; i < n; i++) {
+        next.push({ id: `ing-${base}-${i}-${Math.random().toString(36).slice(2,5)}`, name: "", quantity: 1, unit: "unit" as Unit, predictedCost: undefined });
+      }
+      return next;
+    });
   };
 
   const update = (id: string, patch: Partial<ProductIngredient>) => {
@@ -800,32 +824,53 @@ const IngredientsStep = ({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           {t("productIngredients")}
         </div>
-        <Button onClick={add} size="sm" variant="outline" className="rounded-xl h-8 text-xs">
-          <Plus className="w-3 h-3" /> Bahan
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button onClick={() => addMany(5)} size="sm" variant="ghost" className="rounded-xl h-8 text-[11px] px-2">
+            +5 baris
+          </Button>
+          <Button onClick={add} size="sm" variant="outline" className="rounded-xl h-8 text-xs">
+            <Plus className="w-3 h-3" /> Bahan
+          </Button>
+        </div>
       </div>
+
+      {stock.length > 0 && (
+        <div className="rounded-xl bg-muted/40 border border-border px-3 py-2 text-[11px] text-muted-foreground">
+          💡 Taip nama bahan — auto-cadang dari <span className="font-bold text-foreground">{stock.length}</span> stok sedia ada. Pilih untuk auto-isi unit.
+        </div>
+      )}
 
       {ingredients.length === 0 && (
         <Card className="border-dashed">
           <CardContent className="py-6 text-center">
             <div className="text-2xl mb-2">🥕</div>
             <p className="text-xs text-muted-foreground">{t("noIngredientsYet")}</p>
-            <Button onClick={add} className="mt-3 rounded-2xl bg-gradient-profit text-profit-foreground" size="sm">
-              <Plus className="w-4 h-4" /> Tambah Bahan
-            </Button>
+            <div className="flex items-center justify-center gap-2 mt-3">
+              <Button onClick={add} className="rounded-2xl bg-gradient-profit text-profit-foreground" size="sm">
+                <Plus className="w-4 h-4" /> Tambah Bahan
+              </Button>
+              <Button onClick={() => addMany(5)} variant="outline" className="rounded-2xl" size="sm">
+                +5 baris kosong
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
+
+      <datalist id="stock-name-suggestions">
+        {stock.map((s) => <option key={s.id} value={s.name} />)}
+      </datalist>
 
       <div className="space-y-2">
         {ingredients.map((ing) => (
           <IngredientCard
             key={ing.id}
             ingredient={ing}
+            stock={stock}
             onChange={(patch) => update(ing.id, patch)}
             onRemove={() => remove(ing.id)}
           />
@@ -843,13 +888,16 @@ const IngredientsStep = ({
 
 const IngredientCard = ({
   ingredient,
+  stock = [],
   onChange,
   onRemove,
 }: {
   ingredient: ProductIngredient;
+  stock?: StockItem[];
   onChange: (patch: Partial<ProductIngredient>) => void;
   onRemove: () => void;
 }) => {
+  const matchedStock = stock.find((s) => s.name.trim().toLowerCase() === ingredient.name.trim().toLowerCase());
   const { t } = useTranslation();
   const estimate = estimateIngredientCost;
   const [estimating, setEstimating] = useState(false);
@@ -897,12 +945,28 @@ const IngredientCard = ({
     <Card className="rounded-2xl">
       <CardContent className="p-3 space-y-2">
         <div className="flex items-center gap-2">
-          <Input
-            value={ingredient.name}
-            onChange={(e) => onChange({ name: e.target.value, manualCost: false })}
-            placeholder={t("ingredientName")}
-            className="h-11 flex-1 rounded-xl"
-          />
+          <div className="flex-1 relative">
+            <Input
+              list="stock-name-suggestions"
+              value={ingredient.name}
+              onChange={(e) => {
+                const newName = e.target.value;
+                const match = stock.find((s) => s.name.trim().toLowerCase() === newName.trim().toLowerCase());
+                if (match) {
+                  onChange({ name: newName, unit: match.unit, manualCost: false });
+                } else {
+                  onChange({ name: newName, manualCost: false });
+                }
+              }}
+              placeholder="Cari atau taip nama bahan…"
+              className="h-11 rounded-xl pr-16"
+            />
+            {matchedStock && (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-profit/15 text-profit">
+                ✓ stok
+              </span>
+            )}
+          </div>
           <button
             onClick={onRemove}
             className="w-11 h-11 grid place-items-center rounded-xl bg-cost-soft text-cost tap"

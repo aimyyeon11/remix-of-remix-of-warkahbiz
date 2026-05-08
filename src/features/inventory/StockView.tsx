@@ -98,8 +98,25 @@ export const StockView = ({
   );
 };
 
+const relTime = (iso?: string) => {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 0) return "baru";
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return "baru";
+  if (mins < 60) return `${mins} min lalu`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} jam lalu`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days} hari lalu`;
+  const wks = Math.floor(days / 7);
+  return `${wks} mgg lalu`;
+};
+
 const StockCard = ({ item }: { item: StockItem }) => {
   const low = isLow(item);
+  const restocked = relTime(item.lastRestockedAt);
+  const used = relTime(item.lastUsedAt);
   return (
     <div className={`rounded-2xl p-4 bg-surface border flex flex-col items-center text-center gap-1.5 ${low ? "border-warn/40" : "border-border"}`}>
       <div className="text-4xl leading-none">{item.emoji || "📦"}</div>
@@ -114,6 +131,22 @@ const StockCard = ({ item }: { item: StockItem }) => {
         </div>
       ) : (
         <div className="text-[10px] text-muted-foreground">Stok cukup</div>
+      )}
+      {(restocked || used) && (
+        <div className="w-full pt-1.5 mt-1 border-t border-border/60 space-y-0.5">
+          {restocked && (
+            <div className="text-[10px] text-muted-foreground flex items-center justify-between gap-1">
+              <span>↑ Tambah</span>
+              <span className="font-semibold">{restocked}</span>
+            </div>
+          )}
+          {used && (
+            <div className="text-[10px] text-muted-foreground flex items-center justify-between gap-1">
+              <span>↓ Guna</span>
+              <span className="font-semibold">{used}</span>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

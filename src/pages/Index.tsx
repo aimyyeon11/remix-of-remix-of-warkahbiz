@@ -21,10 +21,12 @@ import { WasteTracker } from "@/features/waste/WasteTracker";
 import { AutopsyReport } from "@/features/autopsy/AutopsyReport";
 import { NotificationCenter, getActiveOpportunityCount } from "@/features/notifications/NotificationCenter";
 import { ProfileView } from "@/features/profile/ProfileView";
+import { CookingLogModal } from "@/features/cooking/CookingLogModal";
+import { CookingLogPrompt } from "@/features/cooking/CookingLogPrompt";
 import { fmt } from "@/lib/format";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import type {
-  Tab, Txn, BuyItem, StockItem, ChatMsg, PettyEntry, ReceiptItem, Unit, OpExEntry, OpExCategory, Product, SavedCard, BusinessHoursSettings, OutletSettings,
+  Tab, Txn, BuyItem, StockItem, ChatMsg, PettyEntry, ReceiptItem, Unit, OpExEntry, OpExCategory, Product, SavedCard, BusinessHoursSettings, OutletSettings, CookingLog,
 } from "@/types";
 import { DEFAULT_OUTLET } from "@/types";
 import { DEFAULT_BUSINESS_HOURS } from "@/features/profile/BusinessHoursView";
@@ -50,6 +52,7 @@ const Index = () => {
   const [wasteOpen, setWasteOpen] = useState(false);
   const [autopsyOpen, setAutopsyOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [cookingLogOpen, setCookingLogOpen] = useState(false);
 
   const [profileName, setProfileName] = useState(() => localStorage.getItem("warkahbiz_profile_name") || "");
   const [businessName, setBusinessName] = useState(() => localStorage.getItem("warkahbiz_business_name") || "");
@@ -63,6 +66,7 @@ const Index = () => {
   ]);
   const [opex, setOpex] = useLocalStorage<OpExEntry[]>("warkahbiz_opex", []);
   const [products, setProducts] = useLocalStorage<Product[]>("warkahbiz_products", []);
+  const [cookingLog, setCookingLog] = useLocalStorage<CookingLog[]>("warkahbiz_cooking_log", []);
   const [cards, setCards] = useLocalStorage<SavedCard[]>("warkahbiz_cards", []);
   const [businessHours, setBusinessHours] = useLocalStorage<BusinessHoursSettings>("warkahbiz_business_hours", DEFAULT_BUSINESS_HOURS);
   const [outlet, setOutlet] = useLocalStorage<OutletSettings>("warkahbiz_outlet", DEFAULT_OUTLET);
@@ -145,6 +149,41 @@ const Index = () => {
     const newTxns: Txn[] = items.map((r, i) => ({ id: Date.now() + i, ts: Date.now() + i, time, createdAt: new Date().toISOString(), type: "out", emoji: r.emoji, label: `Beli ${r.name}`, amount: r.price }));
     setTxns((prev) => [...prev, ...newTxns]);
     toast.success(`${items.length} item berjaya disimpan! 🎉`);
+  };
+
+  const handleLogCooking = (productId: string, batches: number) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const usedNames = new Set<string>();
+
+    setStock((prev) => {
+      const next = [...prev];
+      (product.ingredients ?? []).forEach((ing) => {
+        const idx = next.findIndex((s) => s.name.trim().toLowerCase() === ing.name.trim().toLowerCase());
+        if (idx === -1) return;
+        const need = ing.quantity * batches;
+        const newQty = Math.max(0, +(next[idx].qty - need).toFixed(2));
+        next[idx] = { ...next[idx], qty: newQty, lastUsedAt: nowIso };
+        usedNames.add(next[idx].name.toLowerCase());
+      });
+      return next;
+    });
+
+    setCookingLog((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        ts: Date.now(),
+        createdAt: nowIso,
+        productId: product.id,
+        productName: product.name,
+        productEmoji: product.emoji,
+        batches,
+        batchUnit: product.batchUnit ?? "batch",
+      },
+    ]);
   };
 
   const handleBought = (id: string) => setBuy((prev) => prev.map((b) => b.id === id ? { ...b, done: !b.done } : b));
@@ -306,6 +345,7 @@ const Index = () => {
 
   const handleBoughtItems = (items: Array<{ name: string; qty: number; unit: string; isOpEx?: boolean }>) => {
     const isMatch = (a: string, b: string) => { const x = a.toLowerCase().trim(); const y = b.toLowerCase().trim(); return x === y || x.includes(y) || y.includes(x); };
+    const nowIso = new Date().toISOString();
     items.forEach((item) => {
       setStock(prev => {
         const idx = prev.findIndex(s => isMatch(s.name, item.name));
@@ -321,11 +361,12 @@ const Index = () => {
             restockQty: 0,
             maxQty: item.qty,
             category: "Bahan Mentah",
+            lastRestockedAt: nowIso,
           };
           return [...prev, newItem];
         }
         const updated = [...prev];
-        const merged = { ...updated[idx], qty: +(updated[idx].qty + item.qty).toFixed(2) };
+        const merged = { ...updated[idx], qty: +(updated[idx].qty + item.qty).toFixed(2), lastRestockedAt: nowIso };
         updated[idx] = bumpPeak(merged);
         return updated;
       });
@@ -364,6 +405,8 @@ const Index = () => {
               today={today} week={week} lastWeek={lastWeek}
               profileName={profileName} businessName={businessName}
               todayCogs={todayCogs} todayOtherOpex={todayOtherOpex} todayNetProfit={todayNetProfit}
+              cookingLog={cookingLog}
+              onOpenCookingLog={() => setCookingLogOpen(true)}
               onOpenCalc={() => setCalcOpen(true)}
               onOpenGoals={() => setGoalsOpen(true)}
               onOpenForecast={() => setForecastOpen(true)}
@@ -432,6 +475,15 @@ const Index = () => {
         {wasteOpen && <WasteTracker onClose={() => setWasteOpen(false)} businessName={businessName || profileName} onSendToBuy={(items) => items.forEach(handleAddBuy)} />}
         {autopsyOpen && <AutopsyReport onClose={() => setAutopsyOpen(false)} businessName={businessName || profileName} />}
         {notifOpen && <NotificationCenter onClose={() => setNotifOpen(false)} />}
+        {cookingLogOpen && (
+          <CookingLogModal
+            open={cookingLogOpen}
+            products={products}
+            stock={stock}
+            onClose={() => setCookingLogOpen(false)}
+            onConfirm={handleLogCooking}
+          />
+        )}
       </div>
     </div>
   );
@@ -450,6 +502,7 @@ const TabBtn = ({ icon, label, active, onClick, badge }: { icon: ReactNode; labe
 const TodayView = ({
   today, week, lastWeek, profileName, businessName,
   todayCogs, todayOtherOpex, todayNetProfit,
+  cookingLog, onOpenCookingLog,
   onOpenCalc, onOpenGoals, onOpenForecast, onOpenWaste, onOpenAutopsy,
 }: {
   today: { in: number; out: number; profit: number };
@@ -457,6 +510,7 @@ const TodayView = ({
   lastWeek: { profit: number };
   profileName: string; businessName: string;
   todayCogs: number; todayOtherOpex: number; todayNetProfit: number;
+  cookingLog: CookingLog[]; onOpenCookingLog: () => void;
   onOpenCalc: () => void; onOpenGoals: () => void; onOpenForecast: () => void;
   onOpenWaste: () => void; onOpenAutopsy: () => void;
 }) => {
@@ -498,6 +552,8 @@ const TodayView = ({
           })()}
         </div>
       </div>
+
+      <CookingLogPrompt logs={cookingLog} onOpen={onOpenCookingLog} />
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-3xl p-5 bg-gradient-income text-white shadow-card animate-fade-in">
