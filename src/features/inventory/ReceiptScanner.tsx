@@ -20,11 +20,15 @@ const fileToDataUrl = (f: File) =>
     r.readAsDataURL(f);
   });
 
-export const ReceiptScanner = ({ onClose, onConfirm }: {
+type Classification = "stock" | "personal";
+
+export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
   onClose: () => void;
-  onConfirm: (items: ReceiptItem[]) => void;
+  onConfirm: (stockItems: ReceiptItem[], personalItems: ReceiptItem[]) => void;
+  knownIngredients?: string[];
 }) => {
-  const [phase, setPhase] = useState<Phase>("pick");
+  const [phase, setPhase] = useState<Phase | "classify">("pick");
+  const [classifyMap, setClassifyMap] = useState<Record<number, Classification>>({});
   const [imageUrl, setImageUrl] = useState<string>("");
   const [vendor, setVendor] = useState<string>("");
   const [date, setDate] = useState<string>("");
