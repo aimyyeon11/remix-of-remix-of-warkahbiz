@@ -143,7 +143,7 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
     }
   };
 
-  const itemsTotal = items.reduce((s, i) => s + i.price, 0);
+  const itemsTotal = sumReceiptItems(items);
   const total = receiptTotal > 0 ? receiptTotal : itemsTotal;
 
   return (
@@ -242,8 +242,13 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
               </div>
               {tax > 0 && (
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Termasuk cukai</span>
+                  <span className="text-muted-foreground">Cukai termasuk</span>
                   <span className="font-semibold">RM {tax.toFixed(2)}</span>
+                </div>
+              )}
+              {includedTaxAdjustment && (
+                <div className="rounded-xl bg-profit/10 border border-profit/30 p-2 text-xs leading-relaxed">
+                  Cukai pada resit ialah pecahan dalam jumlah. Item telah diselaraskan dari RM {includedTaxAdjustment.rawSum.toFixed(2)} ke RM {includedTaxAdjustment.adjustedSum.toFixed(2)} supaya sama dengan jumlah resit — cukai tidak ditambah dua kali.
                 </div>
               )}
               <div className="flex items-center justify-between pt-1 border-t border-border">
