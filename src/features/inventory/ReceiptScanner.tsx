@@ -107,7 +107,7 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
   };
 
   const itemsTotal = items.reduce((s, i) => s + i.price, 0);
-  const total = itemsTotal + tax;
+  const total = receiptTotal > 0 ? receiptTotal : itemsTotal;
 
   return (
     <div className="absolute inset-0 z-50 bg-background flex flex-col animate-fade-in">
