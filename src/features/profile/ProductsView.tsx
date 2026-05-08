@@ -981,6 +981,7 @@ const IngredientCard = ({
   const [estimating, setEstimating] = useState(false);
   const [editingCost, setEditingCost] = useState(false);
   const [costDraft, setCostDraft] = useState("");
+  const [qtyDraft, setQtyDraft] = useState(ingredient.quantity === 0 ? "" : String(ingredient.quantity));
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-estimate when name + qty change (debounced)
@@ -1056,17 +1057,33 @@ const IngredientCard = ({
 
         <div className="grid grid-cols-2 gap-2">
           <Input
-            type="number"
+            type="text"
             inputMode="decimal"
-            step="0.01"
-            min="0"
-            value={ingredient.quantity === 0 ? "" : ingredient.quantity}
-            onChange={(e) => onChange({
-              quantity: e.target.value === "" ? 0 : Number(e.target.value),
-              manualCost: false,
-            })}
+            value={qtyDraft}
             placeholder={t("ingredientQty")}
             className="h-11 rounded-xl"
+            onFocus={(e) => e.target.select()}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (raw === "" || /^\d*\.?\d*$/.test(raw)) {
+                setQtyDraft(raw);
+                const parsed = parseFloat(raw);
+                if (!isNaN(parsed) && parsed >= 0) {
+                  onChange({ quantity: parsed, manualCost: false });
+                } else if (raw === "" || raw === "0.") {
+                  onChange({ quantity: 0, manualCost: false });
+                }
+              }
+            }}
+            onBlur={() => {
+              const parsed = parseFloat(qtyDraft);
+              if (isNaN(parsed) || parsed < 0) {
+                setQtyDraft("");
+                onChange({ quantity: 0, manualCost: false });
+              } else {
+                setQtyDraft(String(parsed));
+              }
+            }}
           />
           <select
             value={ingredient.unit}
