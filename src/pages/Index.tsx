@@ -52,6 +52,7 @@ const Index = () => {
   const [wasteOpen, setWasteOpen] = useState(false);
   const [autopsyOpen, setAutopsyOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [cookingLogOpen, setCookingLogOpen] = useState(false);
 
   const [profileName, setProfileName] = useState(() => localStorage.getItem("warkahbiz_profile_name") || "");
   const [businessName, setBusinessName] = useState(() => localStorage.getItem("warkahbiz_business_name") || "");
