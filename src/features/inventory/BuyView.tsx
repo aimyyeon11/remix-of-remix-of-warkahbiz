@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect } from "react";
 import { Check, Share2 } from "lucide-react";
 import type { BuyItem, StockItem, Product, Unit } from "@/types";
+import { emojiForItem } from "@/lib/stockEmoji";
 
 export const BuyView = ({
   buy,
@@ -56,7 +57,7 @@ export const BuyView = ({
 
   const newItem = (name: string): BuyItem => ({
     id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    emoji: "🛒",
+    emoji: emojiForItem(name) || "🛒",
     name,
     cost: 0,
     currentQty: 0,
@@ -69,7 +70,7 @@ export const BuyView = ({
   });
 
   const updateName = (id: string, name: string) => {
-    onSyncNotepad(buy.map((b) => (b.id === id ? { ...b, name } : b)));
+    onSyncNotepad(buy.map((b) => (b.id === id ? { ...b, name, emoji: emojiForItem(name) || b.emoji } : b)));
   };
 
   const removeItem = (id: string) => {
@@ -148,6 +149,7 @@ export const BuyView = ({
       >
         {b.done && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
       </button>
+      <span className="text-base shrink-0">{b.emoji}</span>
       <input
         ref={(el) => (inputsRef.current[b.id] = el)}
         value={b.name}

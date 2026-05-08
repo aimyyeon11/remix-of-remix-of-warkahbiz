@@ -24,6 +24,7 @@ import { ProfileView } from "@/features/profile/ProfileView";
 import { CookingLogModal } from "@/features/cooking/CookingLogModal";
 import { CookingLogPrompt } from "@/features/cooking/CookingLogPrompt";
 import { fmt } from "@/lib/format";
+import { emojiForItem } from "@/lib/stockEmoji";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import type {
   Tab, Txn, BuyItem, StockItem, ChatMsg, PettyEntry, ReceiptItem, Unit, OpExEntry, OpExCategory, Product, SavedCard, BusinessHoursSettings, OutletSettings, CookingLog,
@@ -310,7 +311,7 @@ const Index = () => {
         if (exists) return;
         next.push({
           id: `s-${ing.id}`,
-          emoji: "📦",
+          emoji: emojiForItem(name),
           name,
           qty: 0,
           unit: ing.unit,
@@ -353,7 +354,7 @@ const Index = () => {
           // New ingredient — create a stock entry
           const newItem: StockItem = {
             id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            emoji: "📦",
+            emoji: emojiForItem(item.name),
             name: item.name,
             qty: +item.qty.toFixed(2),
             unit: (item.unit as Unit) || "unit",
