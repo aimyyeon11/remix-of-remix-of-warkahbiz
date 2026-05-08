@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export async function scanReceipt(args: { data: { imageBase64: string; mimeType?: string } }) {
+export async function scanReceipt(args: { data: { imageBase64: string; mimeType?: string; knownIngredients?: string[] } }) {
   const { data, error } = await supabase.functions.invoke("scan-receipt", { body: args.data });
   if (error) {
     console.error("scanReceipt error", error);

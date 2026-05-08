@@ -6,8 +6,18 @@ Parse the receipt image and extract structured data. Return ONLY a JSON object v
 Rules:
 - Detect vendor name and date (format date as readable string e.g. "24 April 2026", or empty if unknown).
 - Extract the printed grand total (after tax/rounding) into "total". Extract total tax (SST/GST/service charge) into "tax". Use 0 if absent.
-- Each item: name (short, in Malay if possible), qty (number), unit (one of: kg, g, liter, ml, biji, pek, kotak, batang, helai, tong, papan, kampit, ekor, unit, pcs, box, pack, dozen), price (RM, total for that line, number).
-- Pick a relevant emoji per item (🍗 ayam, 🥚 telur, 🍚 beras, 🛢️ minyak, 🌾 tepung, 🥤 gula, 🧂 garam, 🧅 bawang, 🌶️ cili, 🥛 santan, 📦 bungkus, 🛒 generic).
+- Each item: name, qty (number), unit (one of: kg, g, liter, ml, biji, pek, kotak, batang, helai, tong, papan, kampit, ekor, unit, pcs, box, pack, dozen), price (RM, total for that line, number).
+- NAME RULE (CRITICAL): Return only the GENERIC INGREDIENT KEY NAME in Malay — short, lowercase-friendly, NO brand, NO size, NO packaging descriptors, NO flavour modifiers unless essential.
+  * "MAGGI TOMATO KETCHUP 500G" → "sos tomato"
+  * "LIFE MAYONNAISE 380ML" → "mayonis"
+  * "ADABI SERBUK CILI 1KG" → "serbuk cili"
+  * "KILANG BERAS SUPER 5KG" → "beras"
+  * "KACANG TANAH GORENG 200G" → "kacang tanah"
+  * "PLASTIC BAG BLACK L" → "pek sampah"
+  * "PREMIER TISSUE 10S" → "tisu"
+  * Drop brand words (MAGGI, ADABI, LIFE, AYAM BRAND, KARA, etc.), drop sizes (500G, 1KG, 380ML), drop pack counts (10S, x6).
+- KNOWN INGREDIENTS MATCHING: A list of existing ingredient key names will be provided. If a receipt item refers to the SAME generic ingredient as one in the list (even with a different brand/size/variant), reuse that EXACT existing key name (case + spelling). Only invent a new key name when there is no semantic match.
+- Pick a relevant emoji per item (🍗 ayam, 🥚 telur, 🍚 beras, 🛢️ minyak, 🌾 tepung, 🥤 gula, 🧂 garam, 🧅 bawang, 🌶️ cili, 🥛 santan, 🥫 sos, 🧻 tisu, 🥜 kacang, 🛍️ pek sampah, 📦 bungkus, 🛒 generic).
 - If qty/unit unclear, default qty=1 unit="unit".
 - Skip subtotal/tax/total LINES from the items list — they are returned separately as total/tax fields.
 - PRICE PRECISION (CRITICAL): Malaysian prices ALWAYS have exactly 2 decimal places. Read every digit carefully:
@@ -63,12 +73,16 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) return json({ ok: false, error: "missing_key", message: "AI belum tersedia." });
 
-    const body = await req.json() as { imageBase64: string; mimeType?: string };
+    const body = await req.json() as { imageBase64: string; mimeType?: string; knownIngredients?: string[] };
     if (!body?.imageBase64 || body.imageBase64.length < 50) {
       return json({ ok: false, error: "invalid_input", message: "Imej tak sah." }, 400);
     }
     const mimeType = body.mimeType || "image/jpeg";
     const dataUrl = body.imageBase64.startsWith("data:") ? body.imageBase64 : `data:${mimeType};base64,${body.imageBase64}`;
+    const known = (body.knownIngredients || []).filter((s) => typeof s === "string" && s.trim()).slice(0, 200);
+    const knownBlock = known.length
+      ? `Existing ingredient key names (reuse the EXACT spelling if the receipt item is the same generic ingredient, even with a different brand/size):\n${known.map((n) => `- ${n}`).join("\n")}`
+      : `No existing ingredients yet — invent concise generic key names (no brand, no size).`;
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -78,7 +92,7 @@ Deno.serve(async (req) => {
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: [
-            { type: "text", text: "Parse this receipt and return the items via the tool." },
+            { type: "text", text: `Parse this receipt and return the items via the tool. Remember: item "name" must be the GENERIC INGREDIENT KEY NAME only (no brand, no size).\n\n${knownBlock}` },
             { type: "image_url", image_url: { url: dataUrl } },
           ] },
         ],
