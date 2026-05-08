@@ -149,6 +149,7 @@ export const BuyView = ({
       >
         {b.done && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
       </button>
+      <span className="text-base shrink-0">{b.emoji}</span>
       <input
         ref={(el) => (inputsRef.current[b.id] = el)}
         value={b.name}
