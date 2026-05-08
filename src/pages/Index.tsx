@@ -553,6 +553,8 @@ const TodayView = ({
         </div>
       </div>
 
+      <CookingLogPrompt logs={cookingLog} onOpen={onOpenCookingLog} />
+
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-3xl p-5 bg-gradient-income text-white shadow-card animate-fade-in">
           <div className="text-xs font-semibold uppercase tracking-wider opacity-90">Duit Masuk 💰</div>
