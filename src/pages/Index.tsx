@@ -24,6 +24,7 @@ import { ProfileView } from "@/features/profile/ProfileView";
 import { CookingLogModal } from "@/features/cooking/CookingLogModal";
 import { CookingLogPrompt } from "@/features/cooking/CookingLogPrompt";
 import { fmt } from "@/lib/format";
+import { emojiForItem } from "@/lib/stockEmoji";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import type {
   Tab, Txn, BuyItem, StockItem, ChatMsg, PettyEntry, ReceiptItem, Unit, OpExEntry, OpExCategory, Product, SavedCard, BusinessHoursSettings, OutletSettings, CookingLog,
