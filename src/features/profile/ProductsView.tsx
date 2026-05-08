@@ -896,6 +896,26 @@ const IngredientsStep = ({
         </div>
       </div>
 
+      <input
+        ref={recipeInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleRecipeScan}
+      />
+      <button
+        type="button"
+        onClick={() => recipeInputRef.current?.click()}
+        disabled={isScanning}
+        className="w-full h-12 rounded-2xl border border-dashed border-primary/50 bg-primary/5 flex items-center justify-center gap-2 tap text-sm font-bold text-primary disabled:opacity-50"
+      >
+        {isScanning ? (
+          <><Loader2 className="w-4 h-4 animate-spin" /> AI sedang baca resepi...</>
+        ) : (
+          <><ScanLine className="w-4 h-4" /> Imbas Resepi (AI)</>
+        )}
+      </button>
+
       {stock.length > 0 && (
         <div className="rounded-xl bg-muted/40 border border-border px-3 py-2 text-[11px] text-muted-foreground">
           💡 Taip nama bahan — auto-cadang dari <span className="font-bold text-foreground">{stock.length}</span> stok sedia ada. Pilih untuk auto-isi unit.
