@@ -14,7 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      user_impian: {
+        Row: {
+          created_at: string
+          current_saved: number
+          device_id: string
+          goal_name: string
+          goal_type: string
+          id: string
+          selected_plan: Json | null
+          target_amount: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_saved?: number
+          device_id: string
+          goal_name: string
+          goal_type: string
+          id?: string
+          selected_plan?: Json | null
+          target_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_saved?: number
+          device_id?: string
+          goal_name?: string
+          goal_type?: string
+          id?: string
+          selected_plan?: Json | null
+          target_amount?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
