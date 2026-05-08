@@ -405,6 +405,8 @@ const Index = () => {
               today={today} week={week} lastWeek={lastWeek}
               profileName={profileName} businessName={businessName}
               todayCogs={todayCogs} todayOtherOpex={todayOtherOpex} todayNetProfit={todayNetProfit}
+              cookingLog={cookingLog}
+              onOpenCookingLog={() => setCookingLogOpen(true)}
               onOpenCalc={() => setCalcOpen(true)}
               onOpenGoals={() => setGoalsOpen(true)}
               onOpenForecast={() => setForecastOpen(true)}
