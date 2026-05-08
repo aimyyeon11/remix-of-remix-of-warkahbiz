@@ -1,45 +1,56 @@
-import { useMemo, useState } from "react";
-import { ArrowLeft, Save, Target, TrendingUp, Lightbulb, CheckCircle2, Circle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft, Save, Target, TrendingUp, Lightbulb, CheckCircle2, Loader2, Sparkles,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { fmt } from "@/lib/format";
+import { supabase } from "@/integrations/supabase/client";
+import { DashboardImpian } from "./DashboardImpian";
+import { createImpian, type SelectedPlan } from "./impianApi";
 
-type GoalType = "machine" | "production" | "premise" | "cert";
+type GoalType = "machine" | "sales" | "branch";
 
 const GOAL_TYPES: { id: GoalType; emoji: string; title: string; desc: string }[] = [
-  { id: "machine", emoji: "🏭", title: "Beli Mesin / Peralatan", desc: "Mesin baru untuk naikkan produksi" },
-  { id: "production", emoji: "📦", title: "Tambah Kuantiti Pengeluaran", desc: "Tingkatkan output harian" },
-  { id: "premise", emoji: "🏠", title: "Premis / Gerai Baru", desc: "Buka cawangan atau gerai" },
-  { id: "cert", emoji: "📜", title: "Sijil & Lesen", desc: "HALAL, MESTI, dan lain-lain" },
+  { id: "machine", emoji: "🏭", title: "Beli Mesin / Peralatan", desc: "Pelaburan mesin atau alatan baru" },
+  { id: "sales",   emoji: "📈", title: "Tingkatkan Jualan",       desc: "Pecahan target & pelan operasi" },
+  { id: "branch",  emoji: "🏠", title: "Buka Cawangan / Gerai Baru", desc: "Anggaran kos & lokasi strategik" },
 ];
 
-const GOAL_TIPS: Record<GoalType, string[]> = {
-  machine: [
-    "Boss boleh cuba jimat lebih RM 50/bulan dengan kurangkan pembaziran bahan mentah.",
-    "Pertimbangkan memohon pembiayaan TEKUN atau MARA — mereka ada skim khas untuk peralatan perniagaan F&B.",
-    "Mesin baru bermakna Boss boleh ambil pesanan katering — sumber pendapatan baru!",
-  ],
-  production: [
-    "Boss boleh tambah shift petang untuk maksimumkan penggunaan mesin sedia ada.",
-    "Beli bahan mentah secara pukal — biasanya jimat 10-15% kos.",
-    "Cuba jual ke kedai runcit berdekatan — pesanan tetap setiap minggu.",
-  ],
-  premise: [
-    "Pilih lokasi dekat sekolah atau pejabat — trafik pelanggan lebih konsisten.",
-    "Mohon geran SME Corp untuk bantuan sewa premis tahun pertama.",
-    "Mula dengan kios kecil dulu sebelum buka kedai penuh — kurangkan risiko.",
-  ],
-  cert: [
-    "Sijil HALAL JAKIM buka peluang masuk pasaraya besar dan eksport.",
-    "MESTI percuma untuk SME — daftar di portal MOH dalam 2 minggu.",
-    "Pelanggan korporat selalu minta sijil — naikkan harga 15-20% selepas dapat.",
-  ],
+const addressBoss = (n: string) => (n?.trim() ? n.trim() : "Boss");
+const numVal = (n: number) => (n === 0 ? "" : String(n));
+
+// ---------- AI response shapes ----------
+type BenefitsResp = { summary: string; benefits: string[] };
+type Plan = { monthly: number; months: number; label: string };
+type PlansResp = { plans: Plan[] };
+type SalesBreakdownResp = {
+  weekdayTarget: number; weekendTarget: number; dailyAverage: number; insight: string;
 };
+type LocationsResp = { locations: { name: string; reason: string }[] };
+type CostItem = { name: string; cost: number; note?: string };
+type CostBreakdownResp = { items: CostItem[]; total: number };
 
-const addressBoss = (businessName: string) => businessName?.trim() ? businessName.trim() : "Boss";
+// ---------- Generic AI invoker ----------
+async function invokeGoalTips<T>(payload: Record<string, unknown>): Promise<T | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke("goal-tips", { body: payload });
+    if (error) {
+      console.error("goal-tips error", error);
+      return null;
+    }
+    return data as T;
+  } catch (e) {
+    console.error("goal-tips exception", e);
+    return null;
+  }
+}
 
+// =====================================================================
+// MAIN COMPONENT — shows Dashboard first; wizard launches via FAB
+// =====================================================================
 export function GoalsPlanner({
   onClose,
   businessName,
@@ -48,344 +59,88 @@ export function GoalsPlanner({
   businessName: string;
 }) {
   const boss = addressBoss(businessName);
-  const [goalType, setGoalType] = useState<GoalType | null>("machine");
-  const [goalName, setGoalName] = useState("Beli mesin penguli roti");
-  const [targetCost, setTargetCost] = useState(4800);
-  const [targetDate, setTargetDate] = useState("");
-  const [benefit, setBenefit] = useState("Boleh hasilkan 2x lebih banyak roti sehari");
-  const [saved, setSaved] = useState(1200);
-  const [monthlySave, setMonthlySave] = useState(400);
-  const [chosenScenario, setChosenScenario] = useState<number>(400);
+  const [view, setView] = useState<"dashboard" | "wizard">("dashboard");
+  const [dashboardKey, setDashboardKey] = useState(0); // force reload after save
+  const [goalType, setGoalType] = useState<GoalType | null>(null);
+  const [resetKey, setResetKey] = useState(0);
 
-  // ROI inputs
-  const [prodBefore, setProdBefore] = useState(80);
-  const [prodAfter, setProdAfter] = useState(160);
-  const [unitPrice, setUnitPrice] = useState(5);
-  const [marginPct, setMarginPct] = useState(35);
-
-  const remaining = Math.max(targetCost - saved, 0);
-  const progressPct = targetCost > 0 ? Math.min((saved / targetCost) * 100, 100) : 0;
-
-  const scenarios = useMemo(() => {
-    const base = monthlySave > 0 ? monthlySave : 400;
-    return [
-      { amt: base, months: Math.ceil(remaining / base) },
-      { amt: Math.round(base * 1.5), months: Math.ceil(remaining / (base * 1.5)) },
-      { amt: base * 2, months: Math.ceil(remaining / (base * 2)) },
-    ];
-  }, [monthlySave, remaining]);
-
-  const chosenMonths = useMemo(() => {
-    const amt = chosenScenario > 0 ? chosenScenario : monthlySave;
-    return amt > 0 ? Math.ceil(remaining / amt) : 0;
-  }, [chosenScenario, monthlySave, remaining]);
-
-  const milestones = useMemo(() => {
-    const amt = chosenScenario > 0 ? chosenScenario : monthlySave;
-    if (amt <= 0) return [];
-    const months = Math.min(chosenMonths, 24);
-    const arr = [];
-    let total = saved;
-    for (let m = 1; m <= months; m++) {
-      total = Math.min(total + amt, targetCost);
-      arr.push({ month: m, save: amt, total });
+  const handlePickGoalType = (t: GoalType) => {
+    if (t !== goalType) {
+      setGoalType(t);
+      setResetKey((k) => k + 1);
     }
-    return arr;
-  }, [chosenScenario, monthlySave, chosenMonths, saved, targetCost]);
-
-  // ROI
-  const extraUnits = Math.max(prodAfter - prodBefore, 0);
-  const extraRevenuePerDay = extraUnits * unitPrice * (marginPct / 100);
-  const extraRevenuePerMonth = extraRevenuePerDay * 30;
-  const paybackDays = extraRevenuePerDay > 0 ? Math.ceil(targetCost / extraRevenuePerDay) : 0;
-
-  const tips = goalType ? GOAL_TIPS[goalType] : [];
-
-  const handleSave = () => {
-    if (!goalType) {
-      toast.error("Boss, pilih jenis matlamat dulu 😊");
-      return;
-    }
-    if (!goalName.trim()) {
-      toast.error("Boss, isi nama matlamat dulu ya");
-      return;
-    }
-    toast.success(`${boss}, matlamat "${goalName}" dah disimpan! 💪`);
-    onClose();
   };
+
+  const handleSaved = () => {
+    setView("dashboard");
+    setGoalType(null);
+    setDashboardKey((k) => k + 1);
+  };
+
+  const handleOpenWizard = () => {
+    setGoalType(null);
+    setView("wizard");
+  };
+
+  if (view === "dashboard") {
+    return (
+      <DashboardImpian
+        key={dashboardKey}
+        onClose={onClose}
+        onNewGoal={handleOpenWizard}
+        businessName={businessName}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-40 bg-background overflow-y-auto animate-fade-in">
       <div className="mx-auto w-full max-w-full sm:max-w-[600px] md:max-w-[760px] lg:max-w-[960px] xl:max-w-[1140px] 2xl:max-w-[1280px] min-h-screen bg-background pb-32">
         <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-4 py-3 flex items-center gap-3">
-          <button onClick={onClose} className="w-10 h-10 grid place-items-center rounded-full hover:bg-muted tap" aria-label="Tutup">
+          <button onClick={() => setView("dashboard")} className="w-10 h-10 grid place-items-center rounded-full hover:bg-muted tap" aria-label="Kembali">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-lg font-extrabold leading-tight">Impian Bisnes {boss}</h1>
-            <p className="text-xs text-muted-foreground">Tetapkan matlamat — AI bina pelan untuk {boss}</p>
+            <h1 className="text-lg font-extrabold leading-tight">Bina Impian Baru</h1>
+            <p className="text-xs text-muted-foreground">AI bina pelan langkah-demi-langkah</p>
           </div>
         </header>
 
         <div className="px-4 py-5 space-y-6">
-          {/* Step 1 */}
-          <section className="space-y-3">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">1. Pilih Jenis Matlamat</h2>
+          {/* Step 1: pick goal type */}
+          <StepCard num={1} title="Pilih Jenis Matlamat">
             <div className="grid grid-cols-1 gap-2">
               {GOAL_TYPES.map((g) => {
                 const active = goalType === g.id;
                 return (
                   <button
                     key={g.id}
-                    onClick={() => setGoalType(g.id)}
-                    className={`w-full text-left rounded-2xl p-4 border-2 tap flex items-center gap-3 transition-all duration-150 ${
-                      active ? "border-transparent bg-gradient-profit text-profit-foreground shadow-card" : "border-border bg-surface hover:border-primary/40"
+                    onClick={() => handlePickGoalType(g.id)}
+                    className={`w-full text-left rounded-2xl p-4 border-2 tap flex items-center gap-3 transition-all ${
+                      active ? "border-primary bg-primary/10 shadow-glow" : "border-border bg-card hover:border-primary/40"
                     }`}
                   >
                     <div className="text-3xl">{g.emoji}</div>
                     <div className="flex-1">
                       <p className="font-extrabold">{g.title}</p>
-                      <p className={`text-xs mt-0.5 ${active ? "text-profit-foreground/80" : "text-muted-foreground"}`}>{g.desc}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{g.desc}</p>
                     </div>
-                    {active && <CheckCircle2 className="w-5 h-5 text-profit-foreground" />}
+                    {active && <CheckCircle2 className="w-5 h-5 text-primary" />}
                   </button>
                 );
               })}
             </div>
-          </section>
+          </StepCard>
 
-          {goalType && (
-            <>
-              {/* Step 2 */}
-              <section className="space-y-3">
-                <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">2. Butiran Matlamat</h2>
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-xs">Nama matlamat</Label>
-                    <Input
-                      value={goalName}
-                      onChange={(e) => setGoalName(e.target.value)}
-                      placeholder="Contoh: Beli mesin penguli roti"
-                      className="h-12 rounded-xl mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Kos yang diperlukan (RM)</Label>
-                    <Input
-                      type="number" inputMode="decimal"
-                      value={targetCost}
-                      onChange={(e) => setTargetCost(Number(e.target.value))}
-                      className="h-12 rounded-xl mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Tarikh sasaran (pilihan)</Label>
-                    <Input
-                      type="date"
-                      value={targetDate}
-                      onChange={(e) => setTargetDate(e.target.value)}
-                      className="h-12 rounded-xl mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Faedah dijangka</Label>
-                    <Input
-                      value={benefit}
-                      onChange={(e) => setBenefit(e.target.value)}
-                      placeholder="Contoh: Boleh hasilkan 2x lebih banyak roti sehari"
-                      className="h-12 rounded-xl mt-1"
-                    />
-                  </div>
-                </div>
-              </section>
-
-              {/* Step 3 */}
-              <section className="space-y-3">
-                <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">3. Simpanan {boss}</h2>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-xs">Dah tersimpan (RM)</Label>
-                    <Input
-                      type="number" inputMode="decimal"
-                      value={saved}
-                      onChange={(e) => setSaved(Number(e.target.value))}
-                      className="h-12 rounded-xl mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Boleh jimat/bulan (RM)</Label>
-                    <Input
-                      type="number" inputMode="decimal"
-                      value={monthlySave}
-                      onChange={(e) => {
-                        const v = Number(e.target.value);
-                        setMonthlySave(v);
-                        setChosenScenario(v);
-                      }}
-                      className="h-12 rounded-xl mt-1"
-                    />
-                  </div>
-                </div>
-              </section>
-
-              {/* AI Plan */}
-              <section className="rounded-2xl p-5 bg-gradient-profit text-profit-foreground shadow-glow space-y-3">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider opacity-90">
-                  <Target className="w-4 h-4" /> Pelan AI — {goalName || "Matlamat Boss"}
-                </div>
-                <div className="space-y-1.5 text-sm">
-                  <Row label="Sasaran" value={fmt(targetCost)} />
-                  <Row label="Dah Tersimpan" value={fmt(saved)} />
-                  <Row label="Baki Diperlukan" value={fmt(remaining)} />
-                </div>
-                <div className="border-t border-white/20 pt-3 space-y-2">
-                  <p className="text-xs opacity-90 font-semibold">Pilih kadar simpanan {boss}:</p>
-                  {scenarios.map((s) => {
-                    const active = chosenScenario === s.amt;
-                    return (
-                      <button
-                        key={s.amt}
-                        onClick={() => setChosenScenario(s.amt)}
-                        className={`w-full text-left rounded-xl px-4 py-3 tap transition-all border-2 ${
-                          active ? "bg-white/25 border-white/60" : "bg-white/10 border-transparent"
-                        }`}
-                      >
-                        <p className="text-sm font-bold">Simpan {fmt(s.amt)}/bulan</p>
-                        <p className="text-xs opacity-90 mt-0.5">
-                          {boss} boleh capai dalam <span className="font-bold">{s.months} bulan</span>
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-
-              {/* ROI */}
-              <section className="space-y-3">
-                <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Adakah Ia Berbaloi?</h2>
-                <div className="rounded-2xl bg-card border border-border p-4 space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs">Pengeluaran sekarang/hari</Label>
-                      <Input type="number" inputMode="numeric" value={prodBefore} onChange={(e) => setProdBefore(Number(e.target.value))} className="h-11 rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Selepas beli (unit/hari)</Label>
-                      <Input type="number" inputMode="numeric" value={prodAfter} onChange={(e) => setProdAfter(Number(e.target.value))} className="h-11 rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Harga jual/unit (RM)</Label>
-                      <Input type="number" inputMode="decimal" value={unitPrice} onChange={(e) => setUnitPrice(Number(e.target.value))} className="h-11 rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Margin keuntungan (%)</Label>
-                      <Input type="number" inputMode="numeric" value={marginPct} onChange={(e) => setMarginPct(Number(e.target.value))} className="h-11 rounded-xl mt-1" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl p-5 bg-primary/10 border border-primary/30 space-y-2">
-                  <div className="flex items-center gap-2 text-primary font-bold">
-                    <TrendingUp className="w-5 h-5" /> Pulangan Pelaburan (ROI)
-                  </div>
-                  <Row label="Pendapatan tambahan sehari" value={fmt(extraRevenuePerDay)} dark />
-                  <Row label="Pendapatan tambahan sebulan" value={fmt(extraRevenuePerMonth)} dark />
-                  {paybackDays > 0 ? (
-                    <p className="text-sm leading-relaxed pt-2">
-                      Mesin {fmt(targetCost)} akan bayar balik dirinya dalam{" "}
-                      <span className="font-extrabold text-primary">{paybackDays} hari</span> operasi sahaja! 🎉
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground pt-2">Isi pengeluaran selepas beli mesin untuk lihat ROI.</p>
-                  )}
-                  {extraRevenuePerMonth > 0 && (
-                    <p className="text-xs text-muted-foreground italic">
-                      Selepas break-even, {boss} akan untung tambahan {fmt(extraRevenuePerMonth)}/bulan.
-                    </p>
-                  )}
-                </div>
-              </section>
-
-              {/* Progress */}
-              <section className="rounded-2xl p-5 bg-card border border-border shadow-sm space-y-3">
-                <div className="flex items-center justify-between text-xs font-semibold">
-                  <span className="text-muted-foreground">Mula</span>
-                  <span className="text-muted-foreground">Matlamat</span>
-                </div>
-                <div className="h-4 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-profit transition-all"
-                    style={{ width: `${progressPct}%` }}
-                  />
-                </div>
-                <p className="text-sm font-bold">
-                  {fmt(saved)} / {fmt(targetCost)} <span className="text-muted-foreground font-normal">({progressPct.toFixed(0)}%)</span>
-                </p>
-                {chosenMonths > 0 && remaining > 0 && (
-                  <p className="text-sm text-foreground">
-                    {boss} tinggal <span className="font-extrabold text-primary">{chosenMonths} bulan</span> lagi! Teruskan semangat 💪
-                  </p>
-                )}
-                {remaining === 0 && (
-                  <p className="text-sm font-bold text-primary">🎉 {boss} dah capai matlamat!</p>
-                )}
-              </section>
-
-              {/* Milestones */}
-              {milestones.length > 0 && (
-                <section className="space-y-3">
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Pencapaian Bulanan</h2>
-                  <div className="rounded-2xl bg-card border border-border p-4 space-y-3">
-                    {milestones.map((m, idx) => {
-                      const isLast = m.total >= targetCost;
-                      const isCurrent = idx === 0;
-                      return (
-                        <div key={m.month} className="flex items-center gap-3">
-                          <div className="relative">
-                            {isLast ? (
-                              <div className="w-7 h-7 rounded-full bg-primary grid place-items-center">
-                                <CheckCircle2 className="w-4 h-4 text-primary-foreground" />
-                              </div>
-                            ) : isCurrent ? (
-                              <div className="w-7 h-7 rounded-full bg-primary grid place-items-center animate-pulse-ring">
-                                <Circle className="w-3 h-3 text-primary-foreground fill-current" />
-                              </div>
-                            ) : (
-                              <div className="w-7 h-7 rounded-full border-2 border-muted bg-background" />
-                            )}
-                            {idx < milestones.length - 1 && (
-                              <div className="absolute left-1/2 -translate-x-1/2 top-7 w-0.5 h-6 bg-muted" />
-                            )}
-                          </div>
-                          <div className="flex-1 pb-3">
-                            <p className="text-sm font-semibold">
-                              {isLast ? `🎉 Bulan ${m.month}: Matlamat Dicapai!` : `Bulan ${m.month}: Jimat ${fmt(m.save)}`}
-                            </p>
-                            <p className="text-xs text-muted-foreground">Jumlah: {fmt(m.total)}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-
-              {/* Tips */}
-              <section className="space-y-2">
-                <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                  <Lightbulb className="w-4 h-4" /> Tips Pintar AI
-                </h2>
-                {tips.map((t, i) => (
-                  <div key={i} className="rounded-2xl p-4 bg-warn-soft border border-warn/30">
-                    <p className="text-sm leading-relaxed">{t}</p>
-                  </div>
-                ))}
-              </section>
-
-              <Button onClick={handleSave} className="w-full h-14 rounded-2xl text-base font-bold bg-gradient-profit text-profit-foreground shadow-fab">
-                <Save className="w-5 h-5 mr-2" /> Simpan Matlamat Ini
-              </Button>
-            </>
+          {/* Conditional flow render (key forces remount = clean state) */}
+          {goalType === "machine" && (
+            <MachineFlow key={`machine-${resetKey}`} boss={boss} onSaved={handleSaved} />
+          )}
+          {goalType === "sales" && (
+            <SalesFlow key={`sales-${resetKey}`} boss={boss} onSaved={handleSaved} />
+          )}
+          {goalType === "branch" && (
+            <BranchFlow key={`branch-${resetKey}`} boss={boss} onSaved={handleSaved} />
           )}
         </div>
       </div>
@@ -393,9 +148,628 @@ export function GoalsPlanner({
   );
 }
 
-const Row = ({ label, value, dark }: { label: string; value: string; dark?: boolean }) => (
-  <div className="flex items-center justify-between text-sm">
-    <span className={dark ? "text-muted-foreground" : "opacity-90"}>{label}</span>
-    <span className="font-bold">{value}</span>
-  </div>
-);
+// =====================================================================
+// FLOW 1: MACHINE
+// =====================================================================
+function MachineFlow({ boss, onSaved }: { boss: string; onSaved: () => void }) {
+  // Step 2 inputs
+  const [name, setName] = useState("");
+  const [cost, setCost] = useState(0);
+  const step2Done = name.trim().length > 0 && cost > 0;
+
+  // Step 3: AI benefits (auto-fetches when step 2 completes)
+  const [benefits, setBenefits] = useState<BenefitsResp | null>(null);
+  const [benefitsLoading, setBenefitsLoading] = useState(false);
+  const benefitsReqId = useRef(0);
+
+  useEffect(() => {
+    if (!step2Done) { setBenefits(null); return; }
+    const id = ++benefitsReqId.current;
+    setBenefitsLoading(true);
+    const t = setTimeout(async () => {
+      const data = await invokeGoalTips<BenefitsResp>({
+        mode: "benefits", goalName: name.trim(), cost, businessName: boss,
+      });
+      if (id !== benefitsReqId.current) return;
+      setBenefits(data);
+      setBenefitsLoading(false);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [step2Done, name, cost, boss]);
+
+  // Step 4: current savings
+  const [saved, setSaved] = useState(0);
+  const [canSave, setCanSave] = useState(0);
+  const step4Done = canSave > 0;
+  const remaining = Math.max(cost - saved, 0);
+
+  // Step 5: AI savings plans (selectable)
+  const [plans, setPlans] = useState<Plan[] | null>(null);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [chosen, setChosen] = useState<Plan | null>(null);
+  const plansReqId = useRef(0);
+
+  useEffect(() => {
+    if (!step4Done || remaining <= 0) { setPlans(null); setChosen(null); return; }
+    const id = ++plansReqId.current;
+    setPlansLoading(true);
+    const t = setTimeout(async () => {
+      const data = await invokeGoalTips<PlansResp>({
+        mode: "plans", goalName: name.trim(), cost: remaining, canSavePerMonth: canSave,
+      });
+      if (id !== plansReqId.current) return;
+      setPlans(data?.plans ?? null);
+      setPlansLoading(false);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [step4Done, remaining, canSave, name]);
+
+  return (
+    <>
+      <StepCard num={2} title={`Butiran Mesin ${boss}`}>
+        <FieldInput label="Nama Mesin / Peralatan" value={name} onChange={setName} placeholder="Contoh: Mesin penguli 20kg" />
+        <FieldNumber label="Kos Diperlukan (RM)" value={cost} onChange={setCost} placeholder="Contoh: 4800" />
+      </StepCard>
+
+      {step2Done && (
+        <StepCard num={3} title="Kelebihan Pelaburan Ini" icon={<Sparkles className="w-4 h-4 text-primary" />}>
+          {benefitsLoading && !benefits ? (
+            <SkeletonBlock />
+          ) : benefits ? (
+            <div className="rounded-2xl p-4 bg-primary/5 border border-primary/20 space-y-2">
+              <p className="text-sm font-semibold">{benefits.summary}</p>
+              <ul className="space-y-1.5 mt-2">
+                {benefits.benefits.map((b, i) => (
+                  <li key={i} className="text-sm flex gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" /><span>{b}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </StepCard>
+      )}
+
+      {step2Done && benefits && (
+        <StepCard num={4} title={`Simpanan ${boss}`}>
+          <FieldNumber label="Jumlah Dah Simpan (RM)" value={saved} onChange={setSaved} placeholder="Contoh: 1200" />
+          <FieldNumber label="Boleh jimat sebulan (RM)" value={canSave} onChange={setCanSave} placeholder="Contoh: 400" />
+          {cost > 0 && (
+            <div className="rounded-xl bg-card border border-border p-3 mt-2">
+              <ProgressRow saved={saved} target={cost} />
+              <p className="text-xs text-muted-foreground mt-1.5">Baki: <span className="font-bold text-foreground">{fmt(remaining)}</span></p>
+            </div>
+          )}
+        </StepCard>
+      )}
+
+      {step4Done && remaining > 0 && (
+        <StepCard num={5} title="Pilih Pelan Simpanan AI" icon={<Sparkles className="w-4 h-4 text-primary" />}>
+          {plansLoading && !plans ? (
+            <SkeletonBlock />
+          ) : plans ? (
+            <div className="space-y-2">
+              {plans.map((p) => {
+                const active = chosen?.monthly === p.monthly;
+                return (
+                  <button
+                    key={p.monthly}
+                    onClick={() => setChosen(p)}
+                    className={`w-full text-left rounded-xl p-4 border-2 tap transition-all ${
+                      active ? "border-primary bg-primary/10 shadow-glow" : "border-border bg-card hover:border-primary/40"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-bold">{p.label}: Simpan {fmt(p.monthly)}/bulan</p>
+                      {active && <CheckCircle2 className="w-5 h-5 text-primary" />}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Capai dalam <span className="font-bold text-foreground">{p.months} bulan</span>
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </StepCard>
+      )}
+
+      {chosen && (
+        <FinalCard title={`Roadmap: ${name}`} boss={boss}>
+          <Row label="Sasaran" value={fmt(cost)} />
+          <Row label="Dah Tersimpan" value={fmt(saved)} />
+          <Row label="Baki Diperlukan" value={fmt(remaining)} />
+          <div className="border-t border-white/20 pt-3 mt-2">
+            <Row label="Pelan Dipilih" value={`${chosen.label} (${fmt(chosen.monthly)}/bln)`} />
+            <Row label="Anggaran Tempoh" value={`${chosen.months} bulan`} />
+          </div>
+          <p className="text-xs opacity-90 italic pt-2">
+            Teruskan semangat {boss}! Setiap bulan {fmt(chosen.monthly)} = satu langkah lebih dekat 💪
+          </p>
+        </FinalCard>
+      )}
+
+      {chosen && (
+        <SaveButton
+          payload={{
+            goal_type: "machine",
+            goal_name: name,
+            target_amount: cost,
+            current_saved: saved,
+            selected_plan: chosen,
+          }}
+          onSaved={onSaved}
+        />
+      )}
+    </>
+  );
+}
+
+// =====================================================================
+// FLOW 2: SALES
+// =====================================================================
+function SalesFlow({ boss, onSaved }: { boss: string; onSaved: () => void }) {
+  // Step 2: monthly target
+  const [target, setTarget] = useState(0);
+  const [currentSales, setCurrentSales] = useState(0);
+  const step2Done = target > 0;
+
+  // Step 3: AI breakdown
+  const [breakdown, setBreakdown] = useState<SalesBreakdownResp | null>(null);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const breakReqId = useRef(0);
+
+  useEffect(() => {
+    if (!step2Done) { setBreakdown(null); return; }
+    const id = ++breakReqId.current;
+    setBreakdownLoading(true);
+    const t = setTimeout(async () => {
+      const data = await invokeGoalTips<SalesBreakdownResp>({
+        mode: "salesBreakdown", monthlyTarget: target, businessName: boss,
+      });
+      if (id !== breakReqId.current) return;
+      setBreakdown(data);
+      setBreakdownLoading(false);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [step2Done, target, boss]);
+
+  // Step 4: AI tips
+  const [tips, setTips] = useState<string[] | null>(null);
+  const [tipsLoading, setTipsLoading] = useState(false);
+  const tipsReqId = useRef(0);
+
+  useEffect(() => {
+    if (!breakdown) { setTips(null); return; }
+    const id = ++tipsReqId.current;
+    setTipsLoading(true);
+    const t = setTimeout(async () => {
+      const data = await invokeGoalTips<{ tips: string[] }>({
+        mode: "salesTips", monthlyTarget: target, currentSales, businessName: boss,
+      });
+      if (id !== tipsReqId.current) return;
+      setTips(data?.tips ?? null);
+      setTipsLoading(false);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [breakdown, target, currentSales, boss]);
+
+  // Step 5: ROI = extra profit if hit target
+  const extra = Math.max(target - currentSales, 0);
+
+  return (
+    <>
+      <StepCard num={2} title="Sasaran Jualan Bulanan">
+        <FieldNumber label="Target Jualan Bulan Ini (RM)" value={target} onChange={setTarget} placeholder="Contoh: 15000" />
+        <FieldNumber label="Jualan biasa sekarang (RM/bulan, pilihan)" value={currentSales} onChange={setCurrentSales} placeholder="Contoh: 9000" />
+      </StepCard>
+
+      {step2Done && (
+        <StepCard num={3} title="Pecahan Target Harian" icon={<Sparkles className="w-4 h-4 text-primary" />}>
+          {breakdownLoading && !breakdown ? (
+            <SkeletonBlock />
+          ) : breakdown ? (
+            <div className="rounded-2xl p-4 bg-primary/5 border border-primary/20 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Stat label="Hari biasa (Isnin-Jumaat)" value={fmt(breakdown.weekdayTarget)} />
+                <Stat label="Hujung minggu" value={fmt(breakdown.weekendTarget)} accent />
+              </div>
+              <div className="text-center pt-2 border-t border-primary/20">
+                <p className="text-xs text-muted-foreground">Purata harian</p>
+                <p className="text-xl font-extrabold text-primary">{fmt(breakdown.dailyAverage)}</p>
+              </div>
+              <p className="text-xs italic text-muted-foreground">{breakdown.insight}</p>
+            </div>
+          ) : null}
+        </StepCard>
+      )}
+
+      {breakdown && (
+        <StepCard num={4} title="Strategi Operasi AI" icon={<Lightbulb className="w-4 h-4 text-warn" />}>
+          {tipsLoading && !tips ? (
+            <SkeletonBlock />
+          ) : tips ? (
+            <div className="space-y-2">
+              {tips.map((t, i) => (
+                <div key={i} className="rounded-2xl p-4 bg-warn-soft border border-warn/30">
+                  <p className="text-sm leading-relaxed">{t}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </StepCard>
+      )}
+
+      {tips && (
+        <FinalCard title="Pulangan Target" boss={boss}>
+          <Row label="Jualan sekarang" value={fmt(currentSales)} />
+          <Row label="Sasaran baru" value={fmt(target)} />
+          <Row label="Tambahan jualan/bulan" value={fmt(extra)} />
+          <Row label="Tambahan jualan/tahun" value={fmt(extra * 12)} />
+          {extra > 0 ? (
+            <p className="text-sm leading-relaxed pt-2 border-t border-white/20">
+              Kalau {boss} hit target, dapat tambahan{" "}
+              <span className="font-extrabold">{fmt(extra)}/bulan</span> = <span className="font-extrabold">{fmt(extra * 12)}/tahun</span> 🎉
+            </p>
+          ) : (
+            <p className="text-xs opacity-90 italic pt-2">Isi jualan semasa untuk lihat tambahan untung.</p>
+          )}
+        </FinalCard>
+      )}
+
+      {tips && (
+        <SaveButton
+          payload={{
+            goal_type: "sales",
+            goal_name: `Target ${fmt(target)}/bulan`,
+            target_amount: target,
+            current_saved: currentSales,
+            selected_plan: null,
+          }}
+          onSaved={onSaved}
+        />
+      )}
+    </>
+  );
+}
+
+// =====================================================================
+// FLOW 3: BRANCH
+// =====================================================================
+function BranchFlow({ boss, onSaved }: { boss: string; onSaved: () => void }) {
+  // Step 2: location
+  const [location, setLocation] = useState("");
+  const [suggestions, setSuggestions] = useState<{ name: string; reason: string }[] | null>(null);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const step2Done = location.trim().length > 0;
+
+  const handleSuggest = async () => {
+    setSuggestLoading(true);
+    const data = await invokeGoalTips<LocationsResp>({
+      mode: "locations", businessName: boss, businessType: "F&B / warung",
+    });
+    setSuggestions(data?.locations ?? null);
+    setSuggestLoading(false);
+  };
+
+  // Step 3: AI cost breakdown
+  const [costs, setCosts] = useState<CostBreakdownResp | null>(null);
+  const [costsLoading, setCostsLoading] = useState(false);
+  const costsReqId = useRef(0);
+
+  useEffect(() => {
+    if (!step2Done) { setCosts(null); return; }
+    const id = ++costsReqId.current;
+    setCostsLoading(true);
+    const t = setTimeout(async () => {
+      const data = await invokeGoalTips<CostBreakdownResp>({
+        mode: "costBreakdown", location: location.trim(), businessName: boss, businessType: "F&B / warung",
+      });
+      if (id !== costsReqId.current) return;
+      setCosts(data);
+      setCostsLoading(false);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [step2Done, location, boss]);
+
+  // Step 4: AI plans (based on total cost)
+  const [canSave, setCanSave] = useState(0);
+  const [plans, setPlans] = useState<Plan[] | null>(null);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [chosen, setChosen] = useState<Plan | null>(null);
+  const plansReqId = useRef(0);
+  const totalCost = costs?.total ?? 0;
+  const step4Done = totalCost > 0 && canSave > 0;
+
+  useEffect(() => {
+    if (!step4Done) { setPlans(null); setChosen(null); return; }
+    const id = ++plansReqId.current;
+    setPlansLoading(true);
+    const t = setTimeout(async () => {
+      const data = await invokeGoalTips<PlansResp>({
+        mode: "plans", goalName: `Buka cawangan di ${location}`, cost: totalCost, canSavePerMonth: canSave,
+      });
+      if (id !== plansReqId.current) return;
+      setPlans(data?.plans ?? null);
+      setPlansLoading(false);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [step4Done, totalCost, canSave, location]);
+
+  return (
+    <>
+      <StepCard num={2} title="Lokasi Cawangan Baru">
+        <div>
+          <Label className="text-xs">Target Lokasi</Label>
+          <div className="flex gap-2 mt-1">
+            <Input
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Contoh: Tepi sekolah Taman Melati"
+              className="h-12 rounded-xl flex-1"
+            />
+            <Button
+              onClick={handleSuggest}
+              disabled={suggestLoading}
+              className="h-12 rounded-xl px-4 font-bold whitespace-nowrap"
+              variant="outline"
+            >
+              {suggestLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              <span className="ml-1">Cadangan AI</span>
+            </Button>
+          </div>
+        </div>
+        {suggestions && (
+          <div className="space-y-2 pt-2">
+            <p className="text-xs text-muted-foreground font-semibold">Klik untuk pilih:</p>
+            {suggestions.map((s, i) => (
+              <button
+                key={i}
+                onClick={() => setLocation(s.name)}
+                className="w-full text-left rounded-xl p-3 bg-card border border-border hover:border-primary/40 tap"
+              >
+                <p className="text-sm font-bold">{s.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{s.reason}</p>
+              </button>
+            ))}
+          </div>
+        )}
+      </StepCard>
+
+      {step2Done && (
+        <StepCard num={3} title="Anggaran Kos Permulaan" icon={<Sparkles className="w-4 h-4 text-primary" />}>
+          {costsLoading && !costs ? (
+            <SkeletonBlock />
+          ) : costs ? (
+            <div className="rounded-2xl bg-card border border-border overflow-hidden">
+              {costs.items.map((it, i) => (
+                <div key={i} className="flex items-start justify-between gap-3 p-3 border-b border-border last:border-0">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold">{it.name}</p>
+                    {it.note && <p className="text-xs text-muted-foreground mt-0.5">{it.note}</p>}
+                  </div>
+                  <p className="text-sm font-bold whitespace-nowrap">{fmt(it.cost)}</p>
+                </div>
+              ))}
+              <div className="flex items-center justify-between p-3 bg-primary/10">
+                <p className="text-sm font-extrabold">Jumlah Anggaran</p>
+                <p className="text-base font-extrabold text-primary">{fmt(costs.total)}</p>
+              </div>
+            </div>
+          ) : null}
+        </StepCard>
+      )}
+
+      {costs && (
+        <StepCard num={4} title="Pilih Pelan Simpanan">
+          <FieldNumber label="Boleh jimat sebulan (RM)" value={canSave} onChange={setCanSave} placeholder="Contoh: 1000" />
+          {step4Done && (
+            <>
+              {plansLoading && !plans ? (
+                <SkeletonBlock />
+              ) : plans ? (
+                <div className="space-y-2 pt-1">
+                  {plans.map((p) => {
+                    const active = chosen?.monthly === p.monthly;
+                    return (
+                      <button
+                        key={p.monthly}
+                        onClick={() => setChosen(p)}
+                        className={`w-full text-left rounded-xl p-4 border-2 tap transition-all ${
+                          active ? "border-primary bg-primary/10 shadow-glow" : "border-border bg-card hover:border-primary/40"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-bold">{p.label}: {fmt(p.monthly)}/bulan</p>
+                          {active && <CheckCircle2 className="w-5 h-5 text-primary" />}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Capai dalam <span className="font-bold text-foreground">{p.months} bulan</span>
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </>
+          )}
+        </StepCard>
+      )}
+
+      {chosen && costs && (
+        <FinalCard title={`Roadmap Cawangan: ${location}`} boss={boss}>
+          <Row label="Jumlah modal" value={fmt(costs.total)} />
+          <Row label="Pelan dipilih" value={`${chosen.label} (${fmt(chosen.monthly)}/bln)`} />
+          <Row label="Anggaran tempoh" value={`${chosen.months} bulan`} />
+          <p className="text-xs opacity-90 italic pt-2 border-t border-white/20 mt-2">
+            {boss} boleh buka cawangan baru di <span className="font-bold">{location}</span> dalam{" "}
+            <span className="font-extrabold">{chosen.months} bulan</span> 🎉
+          </p>
+        </FinalCard>
+      )}
+
+      {chosen && costs && (
+        <SaveButton
+          payload={{
+            goal_type: "branch",
+            goal_name: `Cawangan ${location}`,
+            target_amount: costs.total,
+            current_saved: 0,
+            selected_plan: chosen,
+          }}
+          onSaved={onSaved}
+        />
+      )}
+    </>
+  );
+}
+
+// =====================================================================
+// SHARED UI HELPERS
+// =====================================================================
+function StepCard({
+  num, title, icon, children,
+}: { num: number; title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="space-y-3 animate-fade-in">
+      <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+        <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground grid place-items-center text-xs">{num}</span>
+        {title}
+        {icon}
+      </h2>
+      <div className="space-y-3">{children}</div>
+    </section>
+  );
+}
+
+function FieldInput({
+  label, value, onChange, placeholder,
+}: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="h-12 rounded-xl mt-1" />
+    </div>
+  );
+}
+
+function FieldNumber({
+  label, value, onChange, placeholder,
+}: { label: string; value: number; onChange: (v: number) => void; placeholder?: string }) {
+  return (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <Input
+        type="number" inputMode="decimal"
+        value={numVal(value)}
+        onChange={(e) => onChange(Number(e.target.value))}
+        placeholder={placeholder}
+        className="h-12 rounded-xl mt-1"
+      />
+    </div>
+  );
+}
+
+function SkeletonBlock() {
+  return (
+    <div className="space-y-2">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="rounded-2xl p-4 bg-muted/40 border border-border animate-pulse">
+          <div className="h-3 bg-muted rounded w-3/4 mb-2" />
+          <div className="h-3 bg-muted rounded w-1/2" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className={`rounded-xl p-3 text-center ${accent ? "bg-primary text-primary-foreground" : "bg-card border border-border"}`}>
+      <p className={`text-[10px] uppercase tracking-wider font-semibold ${accent ? "opacity-90" : "text-muted-foreground"}`}>{label}</p>
+      <p className="text-lg font-extrabold mt-0.5">{value}</p>
+    </div>
+  );
+}
+
+function ProgressRow({ saved, target }: { saved: number; target: number }) {
+  const pct = target > 0 ? Math.min((saved / target) * 100, 100) : 0;
+  return (
+    <>
+      <div className="flex items-center justify-between text-xs font-semibold mb-1.5">
+        <span>{fmt(saved)}</span>
+        <span className="text-muted-foreground">{fmt(target)} ({pct.toFixed(0)}%)</span>
+      </div>
+      <div className="h-3 rounded-full bg-muted overflow-hidden">
+        <div className="h-full bg-gradient-profit transition-all" style={{ width: `${pct}%` }} />
+      </div>
+    </>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="opacity-90">{label}</span>
+      <span className="font-bold">{value}</span>
+    </div>
+  );
+}
+
+function FinalCard({ title, boss, children }: { title: string; boss: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl p-5 bg-gradient-profit text-profit-foreground shadow-glow space-y-2 animate-fade-in">
+      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider opacity-90">
+        <Target className="w-4 h-4" /> Pelan AI {boss} — {title}
+      </div>
+      <div className="space-y-1.5 pt-1">{children}</div>
+    </section>
+  );
+}
+
+function SaveButton({
+  payload, onSaved,
+}: {
+  payload: {
+    goal_type: "machine" | "sales" | "branch";
+    goal_name: string;
+    target_amount: number;
+    current_saved: number;
+    selected_plan: SelectedPlan | null;
+  };
+  onSaved: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const handleSave = async () => {
+    if (!payload.goal_name.trim() || payload.target_amount <= 0) {
+      toast.error("Lengkapkan butiran impian dahulu.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await createImpian(payload);
+      toast.success("Matlamat berjaya disimpan! 💪");
+      onSaved();
+    } catch (e) {
+      console.error(e);
+      toast.error("Gagal simpan ke pangkalan data. Cuba lagi.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="sticky bottom-4 z-10 pt-2">
+      <Button
+        onClick={handleSave}
+        disabled={saving}
+        className="w-full h-14 rounded-2xl text-base font-bold bg-gradient-profit text-profit-foreground shadow-fab disabled:opacity-60"
+      >
+        {saving ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Save className="w-5 h-5 mr-2" />}
+        💾 Simpan Impian Ini
+      </Button>
+    </div>
+  );
+}
+
+// Suppress unused import warning (TrendingUp kept available for future use)
+void TrendingUp;
