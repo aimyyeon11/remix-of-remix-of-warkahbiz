@@ -91,9 +91,9 @@ Deno.serve(async (req) => {
     const data = await res.json();
     const argsStr = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
     if (!argsStr) return json({ ok: false, error: "no_tool_call", message: "AI tak dapat baca resit." });
-    let parsed: { vendor: string; date: string; items: Array<{ emoji: string; name: string; qty: number; unit: string; price: number }> };
+    let parsed: { vendor: string; date: string; tax?: number; total?: number; items: Array<{ emoji: string; name: string; qty: number; unit: string; price: number }> };
     try { parsed = JSON.parse(argsStr); } catch { return json({ ok: false, error: "bad_json", message: "Format salah." }); }
-    return json({ ok: true, vendor: parsed.vendor || "", date: parsed.date || "", items: parsed.items || [] });
+    return json({ ok: true, vendor: parsed.vendor || "", date: parsed.date || "", tax: Number(parsed.tax) || 0, total: Number(parsed.total) || 0, items: parsed.items || [] });
   } catch (e) {
     console.error("scan-receipt exception", e);
     return json({ ok: false, error: "exception", message: "Masalah sambungan." });
