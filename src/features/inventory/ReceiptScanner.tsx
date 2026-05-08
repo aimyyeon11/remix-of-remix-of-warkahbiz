@@ -94,6 +94,7 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
     if (!imageUrl) return;
     setPhase("scanning");
     setMismatchWarn(null);
+    setIncludedTaxAdjustment(null);
     try {
       const result = await scanReceipt({ data: { imageBase64: imageUrl, mimeType: "image/jpeg", knownIngredients } });
       if (!result.ok) {
@@ -101,13 +102,18 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
         setPhase("error");
         return;
       }
-      const parsed: ReceiptItem[] = (result.items || []).map((i) => ({
+      const rawParsed: ReceiptItem[] = (result.items || []).map((i) => ({
         emoji: i.emoji || "🛒",
         name: i.name || "Item",
         qty: Number(i.qty) || 1,
         unit: normalizeUnit(i.unit),
-        price: Number(i.price) || 0,
+        price: roundMoney(Number(i.price) || 0),
       }));
+      const printedTotal = roundMoney(result.total || 0);
+      const printedTax = roundMoney(result.tax || 0);
+      const rawSum = sumReceiptItems(rawParsed);
+      const missingIncludedTax = printedTotal > 0 && printedTax > 0 && Math.abs(roundMoney(rawSum + printedTax - printedTotal)) <= MONEY_TOLERANCE && Math.abs(rawSum - printedTotal) > MONEY_TOLERANCE;
+      const parsed = missingIncludedTax ? distributeIncludedTax(rawParsed, printedTax) : rawParsed;
       if (parsed.length === 0) {
         setErrMsg("Tiada item dijumpai. Cuba gambar yang lebih jelas.");
         setPhase("error");
@@ -115,16 +121,19 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
       }
       setVendor(result.vendor);
       setDate(result.date);
-      setTax(result.tax || 0);
-      setReceiptTotal(result.total || 0);
+      setTax(printedTax);
+      setReceiptTotal(printedTotal);
       setItems(parsed);
+      if (missingIncludedTax) {
+        setIncludedTaxAdjustment({ amount: printedTax, rawSum, adjustedSum: sumReceiptItems(parsed) });
+      }
 
       // Tax is already included in printed total (Malaysian SST/GST is a breakdown).
       // Compare sum of items directly against printed total. Tolerance: RM 0.10.
-      const sum = parsed.reduce((s, i) => s + i.price, 0);
-      const diff = Math.abs(sum - (result.total || 0));
-      if ((result.total || 0) > 0 && diff > 0.10) {
-        setMismatchWarn({ sum, receipt: result.total || 0, diff });
+      const sum = sumReceiptItems(parsed);
+      const diff = Math.abs(roundMoney(sum - printedTotal));
+      if (printedTotal > 0 && diff > MONEY_TOLERANCE) {
+        setMismatchWarn({ sum, receipt: printedTotal, diff });
       }
       setPhase("result");
     } catch (e) {
