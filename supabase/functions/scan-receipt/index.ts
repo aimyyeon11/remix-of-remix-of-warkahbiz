@@ -6,8 +6,18 @@ Parse the receipt image and extract structured data. Return ONLY a JSON object v
 Rules:
 - Detect vendor name and date (format date as readable string e.g. "24 April 2026", or empty if unknown).
 - Extract the printed grand total (after tax/rounding) into "total". Extract total tax (SST/GST/service charge) into "tax". Use 0 if absent.
-- Each item: name (short, in Malay if possible), qty (number), unit (one of: kg, g, liter, ml, biji, pek, kotak, batang, helai, tong, papan, kampit, ekor, unit, pcs, box, pack, dozen), price (RM, total for that line, number).
-- Pick a relevant emoji per item (🍗 ayam, 🥚 telur, 🍚 beras, 🛢️ minyak, 🌾 tepung, 🥤 gula, 🧂 garam, 🧅 bawang, 🌶️ cili, 🥛 santan, 📦 bungkus, 🛒 generic).
+- Each item: name, qty (number), unit (one of: kg, g, liter, ml, biji, pek, kotak, batang, helai, tong, papan, kampit, ekor, unit, pcs, box, pack, dozen), price (RM, total for that line, number).
+- NAME RULE (CRITICAL): Return only the GENERIC INGREDIENT KEY NAME in Malay — short, lowercase-friendly, NO brand, NO size, NO packaging descriptors, NO flavour modifiers unless essential.
+  * "MAGGI TOMATO KETCHUP 500G" → "sos tomato"
+  * "LIFE MAYONNAISE 380ML" → "mayonis"
+  * "ADABI SERBUK CILI 1KG" → "serbuk cili"
+  * "KILANG BERAS SUPER 5KG" → "beras"
+  * "KACANG TANAH GORENG 200G" → "kacang tanah"
+  * "PLASTIC BAG BLACK L" → "pek sampah"
+  * "PREMIER TISSUE 10S" → "tisu"
+  * Drop brand words (MAGGI, ADABI, LIFE, AYAM BRAND, KARA, etc.), drop sizes (500G, 1KG, 380ML), drop pack counts (10S, x6).
+- KNOWN INGREDIENTS MATCHING: A list of existing ingredient key names will be provided. If a receipt item refers to the SAME generic ingredient as one in the list (even with a different brand/size/variant), reuse that EXACT existing key name (case + spelling). Only invent a new key name when there is no semantic match.
+- Pick a relevant emoji per item (🍗 ayam, 🥚 telur, 🍚 beras, 🛢️ minyak, 🌾 tepung, 🥤 gula, 🧂 garam, 🧅 bawang, 🌶️ cili, 🥛 santan, 🥫 sos, 🧻 tisu, 🥜 kacang, 🛍️ pek sampah, 📦 bungkus, 🛒 generic).
 - If qty/unit unclear, default qty=1 unit="unit".
 - Skip subtotal/tax/total LINES from the items list — they are returned separately as total/tax fields.
 - PRICE PRECISION (CRITICAL): Malaysian prices ALWAYS have exactly 2 decimal places. Read every digit carefully:
