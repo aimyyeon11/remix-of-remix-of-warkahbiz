@@ -67,7 +67,7 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
     setPhase("scanning");
     setMismatchWarn(null);
     try {
-      const result = await scanReceipt({ data: { imageBase64: imageUrl, mimeType: "image/jpeg" } });
+      const result = await scanReceipt({ data: { imageBase64: imageUrl, mimeType: "image/jpeg", knownIngredients } });
       if (!result.ok) {
         setErrMsg(result.message || "Gagal scan resit");
         setPhase("error");
