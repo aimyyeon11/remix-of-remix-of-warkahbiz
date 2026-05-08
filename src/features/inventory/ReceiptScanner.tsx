@@ -28,8 +28,11 @@ export const ReceiptScanner = ({ onClose, onConfirm }: {
   const [imageUrl, setImageUrl] = useState<string>("");
   const [vendor, setVendor] = useState<string>("");
   const [date, setDate] = useState<string>("");
+  const [tax, setTax] = useState<number>(0);
+  const [receiptTotal, setReceiptTotal] = useState<number>(0);
   const [items, setItems] = useState<ReceiptItem[]>([]);
   const [errMsg, setErrMsg] = useState<string>("");
+  const [mismatchWarn, setMismatchWarn] = useState<null | { sum: number; receipt: number; diff: number }>(null);
 
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
