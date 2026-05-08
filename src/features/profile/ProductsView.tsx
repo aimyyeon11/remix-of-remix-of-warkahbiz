@@ -796,23 +796,80 @@ const IngredientsStep = ({
   stock?: StockItem[];
 }) => {
   const { t } = useTranslation();
+  const recipeInputRef = useRef<HTMLInputElement>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   const add = () => {
     setIngredients((prev) => [
-      ...prev,
       { id: `ing-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, name: "", quantity: 1, unit: "unit" as Unit, predictedCost: undefined },
+      ...prev,
     ]);
   };
 
   const addMany = (n: number) => {
     setIngredients((prev) => {
       const base = Date.now();
-      const next = [...prev];
+      const newRows: ProductIngredient[] = [];
       for (let i = 0; i < n; i++) {
-        next.push({ id: `ing-${base}-${i}-${Math.random().toString(36).slice(2,5)}`, name: "", quantity: 1, unit: "unit" as Unit, predictedCost: undefined });
+        newRows.push({ id: `ing-${base}-${i}-${Math.random().toString(36).slice(2,5)}`, name: "", quantity: 1, unit: "unit" as Unit, predictedCost: undefined });
       }
-      return next;
+      return [...newRows, ...prev];
     });
+  };
+
+  const handleRecipeScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Saiz gambar terlalu besar (maks 8MB)");
+      return;
+    }
+    setIsScanning(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await scanRecipe({ data: { imageBase64: base64, mimeType: file.type || "image/jpeg" } });
+      if (!result.ok) {
+        const msgs: Record<string, string> = {
+          rate_limit: "Terlalu banyak permintaan. Cuba lagi sebentar.",
+          no_credits: "Kredit AI habis.",
+          missing_key: "AI belum disambungkan.",
+          bad_json: "AI tidak dapat membaca bahan. Cuba gambar lebih jelas.",
+        };
+        toast.error(msgs[result.error ?? ""] ?? result.message ?? "Gagal imbas resepi.");
+        return;
+      }
+      if (!result.items || result.items.length === 0) {
+        toast.error("AI tidak jumpa bahan dalam gambar ini. Cuba gambar yang lebih jelas.");
+        return;
+      }
+      const allowedUnits = new Set<Unit>(UNITS);
+      const newIngs: ProductIngredient[] = result.items.map((item, i) => {
+        const rawUnit = (item.unit || "unit").toLowerCase();
+        const unit = (allowedUnits.has(rawUnit as Unit) ? rawUnit : "unit") as Unit;
+        // Auto-link to existing stock if name matches
+        const match = stock.find((s) => s.name.trim().toLowerCase() === (item.name || "").trim().toLowerCase());
+        return {
+          id: `scan-${Date.now()}-${i}`,
+          name: item.name || "Bahan",
+          quantity: Number(item.qty) > 0 ? Number(item.qty) : 1,
+          unit: match ? match.unit : unit,
+          predictedCost: undefined,
+        };
+      });
+      setIngredients((prev) => [...newIngs, ...prev]);
+      toast.success(`${newIngs.length} bahan dikesan dari resepi ✅`);
+    } catch (err) {
+      console.error("Recipe scan error:", err);
+      toast.error("Ralat semasa imbas resepi. Cuba lagi.");
+    } finally {
+      setIsScanning(false);
+      if (recipeInputRef.current) recipeInputRef.current.value = "";
+    }
   };
 
   const update = (id: string, patch: Partial<ProductIngredient>) => {
