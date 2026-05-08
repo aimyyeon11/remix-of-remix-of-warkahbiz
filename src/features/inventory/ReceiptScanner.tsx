@@ -91,10 +91,11 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
       setReceiptTotal(result.total || 0);
       setItems(parsed);
 
-      // Double-check: items + tax vs printed total
-      const sum = parsed.reduce((s, i) => s + i.price, 0) + (result.tax || 0);
+      // Tax is already included in printed total (Malaysian SST/GST is a breakdown).
+      // Compare sum of items directly against printed total. Tolerance: RM 0.10.
+      const sum = parsed.reduce((s, i) => s + i.price, 0);
       const diff = Math.abs(sum - (result.total || 0));
-      if ((result.total || 0) > 0 && diff > 0.05) {
+      if ((result.total || 0) > 0 && diff > 0.10) {
         setMismatchWarn({ sum, receipt: result.total || 0, diff });
       }
       setPhase("result");
