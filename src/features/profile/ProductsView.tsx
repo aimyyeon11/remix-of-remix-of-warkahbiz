@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Sparkles, Loader2, ChevronRight, ArrowLeft, Package } from "lucide-react";
+import { Plus, Pencil, Trash2, Sparkles, Loader2, ChevronRight, ArrowLeft, Package, ScanLine } from "lucide-react";
 
+import { scanRecipe } from "@/server/scanRecipe.functions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,7 @@ import { estimateIngredientCost } from "@/server/estimateCost.functions";
 import { multiplierFor, tierFor, tierLabelKey } from "./profitScale";
 import type { Product, ProductIngredient, ProductPackaging, StockItem, Unit } from "@/types";
 
-const UNITS: Unit[] = ["ekor", "kotak", "kg", "gram", "paket", "liter", "botol", "biji", "ikat", "tin", "bungkus", "sudu", "cawan"];
+const UNITS: Unit[] = ["kg", "g", "gram", "liter", "ml", "biji", "pek", "paket", "kotak", "botol", "tin", "bungkus", "batang", "helai", "ikat", "tong", "papan", "kampit", "ekor", "sudu", "cawan", "unit", "pcs", "box", "pack", "dozen"];
 const BATCH_UNITS = ["biji", "pcs", "servings", "kotak", "pek", "botol", "balang", "helai", "ketul"];
 
 const PRODUCT_CATEGORIES = ["Makanan", "Minuman", "Pek & Set", "Lain-lain"] as const;

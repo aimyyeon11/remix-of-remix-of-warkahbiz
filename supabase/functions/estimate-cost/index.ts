@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
         signal: controller.signal,
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash-lite",
+          model: "google/gemini-2.5-flash",
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: `Estimate market cost for: ${body.quantity} ${body.unit} of ${body.name}` },
