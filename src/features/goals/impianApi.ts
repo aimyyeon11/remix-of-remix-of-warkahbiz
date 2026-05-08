@@ -40,7 +40,7 @@ export async function listImpian(): Promise<Impian[]> {
     .eq("device_id", deviceId)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (data ?? []) as Impian[];
+  return (data ?? []) as unknown as Impian[];
 }
 
 export async function createImpian(input: {
@@ -58,7 +58,7 @@ export async function createImpian(input: {
     .select()
     .single();
   if (error) throw error;
-  return data as Impian;
+  return data as unknown as Impian;
 }
 
 export async function addSavings(id: string, delta: number): Promise<Impian> {
@@ -77,7 +77,7 @@ export async function addSavings(id: string, delta: number): Promise<Impian> {
     .select()
     .single();
   if (error) throw error;
-  return data as Impian;
+  return data as unknown as Impian;
 }
 
 export async function deleteImpian(id: string): Promise<void> {
