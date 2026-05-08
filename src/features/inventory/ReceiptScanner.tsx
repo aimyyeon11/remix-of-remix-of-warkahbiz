@@ -237,7 +237,7 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
             </div>
             <div className="mt-3 border-t border-border pt-3 space-y-1 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Subtotal item</span>
+                <span className="text-muted-foreground">Jumlah item</span>
                 <span className="font-semibold">RM {itemsTotal.toFixed(2)}</span>
               </div>
               {tax > 0 && (
@@ -267,7 +267,7 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
                     Jumlah tidak sepadan
                   </div>
                   <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Subtotal item = <b>RM {mismatchWarn.sum.toFixed(2)}</b> tetapi total resit = <b>RM {mismatchWarn.receipt.toFixed(2)}</b> (beza <b>RM {mismatchWarn.diff.toFixed(2)}</b>). Semak harga setiap item — mungkin ada yang tersalah baca (cth. RM 6.90 jadi RM 6.09).
+                    Jumlah item termasuk cukai = <b>RM {mismatchWarn.sum.toFixed(2)}</b> tetapi total resit = <b>RM {mismatchWarn.receipt.toFixed(2)}</b> (beza <b>RM {mismatchWarn.diff.toFixed(2)}</b>). Semak harga setiap item — mungkin ada yang tersalah baca (cth. RM 6.90 jadi RM 6.09).
                   </div>
                 </div>
               </div>
