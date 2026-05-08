@@ -84,11 +84,11 @@ Deno.serve(async (req) => {
       ? `Existing ingredient key names (reuse the EXACT spelling if the receipt item is the same generic ingredient, even with a different brand/size):\n${known.map((n) => `- ${n}`).join("\n")}`
       : `No existing ingredients yet — invent concise generic key names (no brand, no size).`;
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const callGateway = (model: string) => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: [
@@ -101,12 +101,31 @@ Deno.serve(async (req) => {
       }),
     });
 
-    if (!res.ok) {
-      const t = await res.text().catch(() => "");
-      console.error("scan-receipt gateway error", res.status, t);
-      if (res.status === 429) return json({ ok: false, error: "rate_limit", message: "Terlalu banyak permintaan." });
-      if (res.status === 402) return json({ ok: false, error: "no_credits", message: "Kredit AI habis." });
-      return json({ ok: false, error: `http_${res.status}`, message: "Gagal scan resit." });
+    // Retry chain: try primary, then back off on 429, then fall back to a less-busy model.
+    const attempts: Array<{ model: string; waitMs: number }> = [
+      { model: "google/gemini-2.5-flash", waitMs: 0 },
+      { model: "google/gemini-2.5-flash", waitMs: 1500 },
+      { model: "google/gemini-2.5-flash-lite", waitMs: 800 },
+      { model: "google/gemini-2.5-flash-lite", waitMs: 2500 },
+    ];
+    let res: Response | null = null;
+    let lastStatus = 0;
+    let lastBody = "";
+    for (const a of attempts) {
+      if (a.waitMs) await new Promise((r) => setTimeout(r, a.waitMs));
+      const r = await callGateway(a.model);
+      if (r.ok) { res = r; break; }
+      lastStatus = r.status;
+      lastBody = await r.text().catch(() => "");
+      console.warn("scan-receipt attempt failed", a.model, r.status);
+      if (r.status !== 429 && r.status !== 503) break; // only retry on rate-limit / transient
+    }
+
+    if (!res) {
+      console.error("scan-receipt gateway error", lastStatus, lastBody);
+      if (lastStatus === 429) return json({ ok: false, error: "rate_limit", message: "AI sibuk sekarang. Cuba lagi sekejap." });
+      if (lastStatus === 402) return json({ ok: false, error: "no_credits", message: "Kredit AI habis." });
+      return json({ ok: false, error: `http_${lastStatus}`, message: "Gagal scan resit." });
     }
 
     const data = await res.json();
