@@ -15,7 +15,7 @@ Rules:
   * Pay close attention to trailing zeros — RM 6.90, RM 10.00, RM 2.50 are common.
   * If a printed price looks like "X.X", it is almost certainly "X.X0" — re-read the receipt.
 - Tax in Malaysia (SST/GST) is INCLUDED in the printed total, not added on top. The "total" field must be the final printed amount.
-- Verify your work: sum(item prices) should equal the printed total (within RM 0.10 rounding). If it does NOT match, RE-READ each item price digit by digit, paying special attention to the cents (last 2 digits) before returning.
+- Verify your work: sum(item prices) should equal the printed total (within RM 0.10 rounding). If it does NOT match, RE-READ each item price digit by digit, paying special attention to the cents (last 2 digits) before returning.`;
 
 const TOOL_SCHEMA = {
   type: "function",
