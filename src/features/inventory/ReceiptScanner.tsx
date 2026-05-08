@@ -61,6 +61,7 @@ export const ReceiptScanner = ({ onClose, onConfirm }: {
   const doScan = async () => {
     if (!imageUrl) return;
     setPhase("scanning");
+    setMismatchWarn(null);
     try {
       const result = await scanReceipt({ data: { imageBase64: imageUrl, mimeType: "image/jpeg" } });
       if (!result.ok) {
@@ -82,7 +83,16 @@ export const ReceiptScanner = ({ onClose, onConfirm }: {
       }
       setVendor(result.vendor);
       setDate(result.date);
+      setTax(result.tax || 0);
+      setReceiptTotal(result.total || 0);
       setItems(parsed);
+
+      // Double-check: items + tax vs printed total
+      const sum = parsed.reduce((s, i) => s + i.price, 0) + (result.tax || 0);
+      const diff = Math.abs(sum - (result.total || 0));
+      if ((result.total || 0) > 0 && diff > 0.05) {
+        setMismatchWarn({ sum, receipt: result.total || 0, diff });
+      }
       setPhase("result");
     } catch (e) {
       console.error(e);
@@ -91,7 +101,8 @@ export const ReceiptScanner = ({ onClose, onConfirm }: {
     }
   };
 
-  const total = items.reduce((s, i) => s + i.price, 0);
+  const itemsTotal = items.reduce((s, i) => s + i.price, 0);
+  const total = itemsTotal + tax;
 
   return (
     <div className="absolute inset-0 z-50 bg-background flex flex-col animate-fade-in">
