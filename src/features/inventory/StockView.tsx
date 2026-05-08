@@ -115,14 +115,27 @@ const relTime = (iso?: string) => {
   return `${wks} mgg lalu`;
 };
 
+const bgForCategory = (cat?: string) => {
+  switch (cat) {
+    case "Bahan Mentah": return "bg-emerald-100 text-emerald-700";
+    case "Minuman": return "bg-sky-100 text-sky-700";
+    case "Pembungkusan": return "bg-amber-100 text-amber-700";
+    default: return "bg-slate-100 text-slate-600";
+  }
+};
+
 const StockCard = ({ item }: { item: StockItem }) => {
   const low = isLow(item);
   const restocked = relTime(item.lastRestockedAt);
   const used = relTime(item.lastUsedAt);
+  const emoji = item.emoji || emojiForItem(item.name);
+  const bgClass = bgForCategory(item.category);
   return (
-    <div className={`rounded-2xl p-4 bg-surface border flex flex-col items-center text-center gap-1.5 ${low ? "border-warn/40" : "border-border"}`}>
-      <div className="text-4xl leading-none">{item.emoji || "📦"}</div>
-      <div className="font-bold text-sm truncate w-full">{item.name}</div>
+    <div className={`rounded-2xl p-4 bg-surface border flex flex-col items-center text-center gap-2 ${low ? "border-warn/40" : "border-border"}`}>
+      <div className={`w-16 h-16 rounded-2xl grid place-items-center text-3xl ${bgClass}`}>
+        {emoji}
+      </div>
+      <div className="font-bold text-sm truncate w-full leading-tight">{item.name}</div>
       <div className="text-xl font-extrabold">
         {fmtQty(item.qty, item.unit)}
       </div>
