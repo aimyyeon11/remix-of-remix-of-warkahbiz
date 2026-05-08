@@ -297,6 +297,42 @@ export const LogView = ({ txns, today, week, month, petty, opex, todayCogs, toda
             )}
           </section>
 
+          <section className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Rekod Petty Cash</h2>
+              <span className="text-[10px] font-bold text-muted-foreground">Tidak dikira dalam Untung Bersih</span>
+            </div>
+            <div className="rounded-2xl p-3 bg-warn/5 border border-warn/30 flex items-center gap-3">
+              <Coins className="w-5 h-5 text-warn shrink-0" />
+              <div className="flex-1">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Baki Petty Cash</div>
+                <div className="text-lg font-extrabold">RM {balance.toFixed(2)}</div>
+              </div>
+            </div>
+            {petty.length === 0 ? (
+              <div className="rounded-2xl p-6 bg-surface border border-dashed border-border text-center text-sm text-muted-foreground">
+                Tiada rekod petty cash.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {[...petty].reverse().slice(0, 10).map((p) => (
+                  <div key={p.id} className="rounded-2xl p-3 bg-surface border border-border flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl grid place-items-center text-xl ${p.type === "in" ? "bg-profit/15" : "bg-cost/15"}`}>
+                      {p.emoji}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm truncate">{p.desc}</div>
+                      <div className="text-[11px] text-muted-foreground">{p.time} • Baki: RM {p.balance.toFixed(2)}</div>
+                    </div>
+                    <div className={`font-extrabold text-sm ${p.type === "in" ? "text-profit" : "text-cost"}`}>
+                      {p.type === "in" ? "+" : "−"}RM {p.amount.toFixed(2)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
           {opexSheet && (
             <OpExInputSheet
               onClose={() => setOpexSheet(false)}
