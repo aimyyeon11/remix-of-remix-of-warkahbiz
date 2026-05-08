@@ -21,6 +21,33 @@ const fileToDataUrl = (f: File) =>
   });
 
 type Classification = "stock" | "personal";
+const MONEY_TOLERANCE = 0.10;
+
+const roundMoney = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
+const sumReceiptItems = (list: ReceiptItem[]) => roundMoney(list.reduce((sum, item) => sum + item.price, 0));
+
+const distributeIncludedTax = (list: ReceiptItem[], amount: number): ReceiptItem[] => {
+  const centsToAdd = Math.round(amount * 100);
+  if (!list.length || centsToAdd <= 0) return list;
+
+  const baseCents = list.map((item) => Math.round(item.price * 100));
+  const totalCents = baseCents.reduce((sum, cents) => sum + Math.max(cents, 0), 0);
+  const weighted = list.map((_, idx) => {
+    const weight = totalCents > 0 ? Math.max(baseCents[idx], 0) / totalCents : 1 / list.length;
+    const exact = weight * centsToAdd;
+    return { idx, cents: Math.floor(exact), fraction: exact - Math.floor(exact) };
+  });
+  let allocated = weighted.reduce((sum, item) => sum + item.cents, 0);
+  weighted.sort((a, b) => b.fraction - a.fraction).forEach((item) => {
+    if (allocated < centsToAdd) {
+      item.cents += 1;
+      allocated += 1;
+    }
+  });
+
+  const addByIndex = new Map(weighted.map((item) => [item.idx, item.cents]));
+  return list.map((item, idx) => ({ ...item, price: roundMoney(item.price + (addByIndex.get(idx) || 0) / 100) }));
+};
 
 export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
   onClose: () => void;
@@ -37,6 +64,7 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
   const [items, setItems] = useState<ReceiptItem[]>([]);
   const [errMsg, setErrMsg] = useState<string>("");
   const [mismatchWarn, setMismatchWarn] = useState<null | { sum: number; receipt: number; diff: number }>(null);
+  const [includedTaxAdjustment, setIncludedTaxAdjustment] = useState<null | { amount: number; rawSum: number; adjustedSum: number }>(null);
 
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
