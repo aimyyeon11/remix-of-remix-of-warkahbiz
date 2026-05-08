@@ -788,17 +788,30 @@ const BasicInfoStep = ({
 const IngredientsStep = ({
   ingredients,
   setIngredients,
+  stock = [],
 }: {
   ingredients: ProductIngredient[];
   setIngredients: React.Dispatch<React.SetStateAction<ProductIngredient[]>>;
+  stock?: StockItem[];
 }) => {
   const { t } = useTranslation();
 
   const add = () => {
     setIngredients((prev) => [
       ...prev,
-      { id: `ing-${Date.now()}`, name: "", quantity: 1, unit: "unit" as Unit, predictedCost: undefined },
+      { id: `ing-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, name: "", quantity: 1, unit: "unit" as Unit, predictedCost: undefined },
     ]);
+  };
+
+  const addMany = (n: number) => {
+    setIngredients((prev) => {
+      const base = Date.now();
+      const next = [...prev];
+      for (let i = 0; i < n; i++) {
+        next.push({ id: `ing-${base}-${i}-${Math.random().toString(36).slice(2,5)}`, name: "", quantity: 1, unit: "unit" as Unit, predictedCost: undefined });
+      }
+      return next;
+    });
   };
 
   const update = (id: string, patch: Partial<ProductIngredient>) => {
@@ -811,32 +824,53 @@ const IngredientsStep = ({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           {t("productIngredients")}
         </div>
-        <Button onClick={add} size="sm" variant="outline" className="rounded-xl h-8 text-xs">
-          <Plus className="w-3 h-3" /> Bahan
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button onClick={() => addMany(5)} size="sm" variant="ghost" className="rounded-xl h-8 text-[11px] px-2">
+            +5 baris
+          </Button>
+          <Button onClick={add} size="sm" variant="outline" className="rounded-xl h-8 text-xs">
+            <Plus className="w-3 h-3" /> Bahan
+          </Button>
+        </div>
       </div>
+
+      {stock.length > 0 && (
+        <div className="rounded-xl bg-muted/40 border border-border px-3 py-2 text-[11px] text-muted-foreground">
+          💡 Taip nama bahan — auto-cadang dari <span className="font-bold text-foreground">{stock.length}</span> stok sedia ada. Pilih untuk auto-isi unit.
+        </div>
+      )}
 
       {ingredients.length === 0 && (
         <Card className="border-dashed">
           <CardContent className="py-6 text-center">
             <div className="text-2xl mb-2">🥕</div>
             <p className="text-xs text-muted-foreground">{t("noIngredientsYet")}</p>
-            <Button onClick={add} className="mt-3 rounded-2xl bg-gradient-profit text-profit-foreground" size="sm">
-              <Plus className="w-4 h-4" /> Tambah Bahan
-            </Button>
+            <div className="flex items-center justify-center gap-2 mt-3">
+              <Button onClick={add} className="rounded-2xl bg-gradient-profit text-profit-foreground" size="sm">
+                <Plus className="w-4 h-4" /> Tambah Bahan
+              </Button>
+              <Button onClick={() => addMany(5)} variant="outline" className="rounded-2xl" size="sm">
+                +5 baris kosong
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
+
+      <datalist id="stock-name-suggestions">
+        {stock.map((s) => <option key={s.id} value={s.name} />)}
+      </datalist>
 
       <div className="space-y-2">
         {ingredients.map((ing) => (
           <IngredientCard
             key={ing.id}
             ingredient={ing}
+            stock={stock}
             onChange={(patch) => update(ing.id, patch)}
             onRemove={() => remove(ing.id)}
           />
