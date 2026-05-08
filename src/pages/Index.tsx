@@ -502,6 +502,7 @@ const TabBtn = ({ icon, label, active, onClick, badge }: { icon: ReactNode; labe
 const TodayView = ({
   today, week, lastWeek, profileName, businessName,
   todayCogs, todayOtherOpex, todayNetProfit,
+  cookingLog, onOpenCookingLog,
   onOpenCalc, onOpenGoals, onOpenForecast, onOpenWaste, onOpenAutopsy,
 }: {
   today: { in: number; out: number; profit: number };
@@ -509,6 +510,7 @@ const TodayView = ({
   lastWeek: { profit: number };
   profileName: string; businessName: string;
   todayCogs: number; todayOtherOpex: number; todayNetProfit: number;
+  cookingLog: CookingLog[]; onOpenCookingLog: () => void;
   onOpenCalc: () => void; onOpenGoals: () => void; onOpenForecast: () => void;
   onOpenWaste: () => void; onOpenAutopsy: () => void;
 }) => {
