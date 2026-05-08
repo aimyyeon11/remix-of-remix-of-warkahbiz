@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect } from "react";
 import { Check, Share2 } from "lucide-react";
 import type { BuyItem, StockItem, Product, Unit } from "@/types";
+import { emojiForItem } from "@/lib/stockEmoji";
 
 export const BuyView = ({
   buy,
