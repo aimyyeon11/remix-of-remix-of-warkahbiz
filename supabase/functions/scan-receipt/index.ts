@@ -73,12 +73,16 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) return json({ ok: false, error: "missing_key", message: "AI belum tersedia." });
 
-    const body = await req.json() as { imageBase64: string; mimeType?: string };
+    const body = await req.json() as { imageBase64: string; mimeType?: string; knownIngredients?: string[] };
     if (!body?.imageBase64 || body.imageBase64.length < 50) {
       return json({ ok: false, error: "invalid_input", message: "Imej tak sah." }, 400);
     }
     const mimeType = body.mimeType || "image/jpeg";
     const dataUrl = body.imageBase64.startsWith("data:") ? body.imageBase64 : `data:${mimeType};base64,${body.imageBase64}`;
+    const known = (body.knownIngredients || []).filter((s) => typeof s === "string" && s.trim()).slice(0, 200);
+    const knownBlock = known.length
+      ? `Existing ingredient key names (reuse the EXACT spelling if the receipt item is the same generic ingredient, even with a different brand/size):\n${known.map((n) => `- ${n}`).join("\n")}`
+      : `No existing ingredients yet — invent concise generic key names (no brand, no size).`;
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -88,7 +92,7 @@ Deno.serve(async (req) => {
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: [
-            { type: "text", text: "Parse this receipt and return the items via the tool." },
+            { type: "text", text: `Parse this receipt and return the items via the tool. Remember: item "name" must be the GENERIC INGREDIENT KEY NAME only (no brand, no size).\n\n${knownBlock}` },
             { type: "image_url", image_url: { url: dataUrl } },
           ] },
         ],
