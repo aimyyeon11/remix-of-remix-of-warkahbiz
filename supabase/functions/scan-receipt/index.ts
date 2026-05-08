@@ -20,6 +20,8 @@ const TOOL_SCHEMA = {
       properties: {
         vendor: { type: "string" },
         date: { type: "string" },
+        tax: { type: "number", description: "Total tax amount in RM, or 0 if none" },
+        total: { type: "number", description: "Grand total printed on the receipt in RM" },
         items: {
           type: "array",
           items: {
@@ -36,7 +38,7 @@ const TOOL_SCHEMA = {
           },
         },
       },
-      required: ["vendor", "date", "items"],
+      required: ["vendor", "date", "tax", "total", "items"],
       additionalProperties: false,
     },
   },
