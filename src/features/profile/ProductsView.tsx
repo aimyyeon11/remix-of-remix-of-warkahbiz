@@ -185,6 +185,7 @@ export const ProductsView = ({
         key={editing?.id ?? "new"}
         open={sheetOpen}
         initial={editing}
+        stock={stock}
         onClose={() => setSheetOpen(false)}
         onSave={(p) => {
           onSave(p);
