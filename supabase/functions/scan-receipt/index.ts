@@ -5,10 +5,12 @@ Parse the receipt image and extract structured data. Return ONLY a JSON object v
 
 Rules:
 - Detect vendor name and date (format date as readable string e.g. "24 April 2026", or empty if unknown).
+- Extract the printed grand total (after tax/rounding) into "total". Extract total tax (SST/GST/service charge) into "tax". Use 0 if absent.
 - Each item: name (short, in Malay if possible), qty (number), unit (one of: kg, g, liter, ml, biji, pek, kotak, batang, helai, tong, papan, kampit, ekor, unit, pcs, box, pack, dozen), price (RM, total for that line, number).
 - Pick a relevant emoji per item (🍗 ayam, 🥚 telur, 🍚 beras, 🛢️ minyak, 🌾 tepung, 🥤 gula, 🧂 garam, 🧅 bawang, 🌶️ cili, 🥛 santan, 📦 bungkus, 🛒 generic).
 - If qty/unit unclear, default qty=1 unit="unit".
-- Skip taxes, totals, subtotals — items only.`;
+- Skip subtotal/tax/total LINES from the items list — they are returned separately as total/tax fields.
+- Verify your work: sum(item prices) + tax should equal total. If it does not, re-read the receipt carefully before returning.`;
 
 const TOOL_SCHEMA = {
   type: "function",
