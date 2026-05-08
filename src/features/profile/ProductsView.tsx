@@ -509,13 +509,20 @@ const BatchDefinitionBlock = ({
           />
         </Field>
         <Field label={t("batchUnitLabel")}>
-          <select
+          <Input
+            list="batch-unit-suggestions"
             value={batchUnit}
             onChange={(e) => setBatchUnit(e.target.value)}
-            className="w-full h-12 px-4 rounded-2xl bg-background border border-input text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            {BATCH_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-          </select>
+            placeholder="periuk, tray, loyang…"
+            className="h-12 rounded-2xl text-base font-semibold"
+          />
+          <datalist id="batch-unit-suggestions">
+            {BATCH_UNITS.map((u) => <option key={u} value={u} />)}
+            <option value="periuk" />
+            <option value="tray" />
+            <option value="loyang" />
+            <option value="bungkus" />
+          </datalist>
         </Field>
       </div>
     </div>
