@@ -888,13 +888,16 @@ const IngredientsStep = ({
 
 const IngredientCard = ({
   ingredient,
+  stock = [],
   onChange,
   onRemove,
 }: {
   ingredient: ProductIngredient;
+  stock?: StockItem[];
   onChange: (patch: Partial<ProductIngredient>) => void;
   onRemove: () => void;
 }) => {
+  const matchedStock = stock.find((s) => s.name.trim().toLowerCase() === ingredient.name.trim().toLowerCase());
   const { t } = useTranslation();
   const estimate = estimateIngredientCost;
   const [estimating, setEstimating] = useState(false);
