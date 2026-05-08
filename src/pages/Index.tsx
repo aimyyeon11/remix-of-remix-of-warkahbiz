@@ -475,6 +475,15 @@ const Index = () => {
         {wasteOpen && <WasteTracker onClose={() => setWasteOpen(false)} businessName={businessName || profileName} onSendToBuy={(items) => items.forEach(handleAddBuy)} />}
         {autopsyOpen && <AutopsyReport onClose={() => setAutopsyOpen(false)} businessName={businessName || profileName} />}
         {notifOpen && <NotificationCenter onClose={() => setNotifOpen(false)} />}
+        {cookingLogOpen && (
+          <CookingLogModal
+            open={cookingLogOpen}
+            products={products}
+            stock={stock}
+            onClose={() => setCookingLogOpen(false)}
+            onConfirm={handleLogCooking}
+          />
+        )}
       </div>
     </div>
   );
