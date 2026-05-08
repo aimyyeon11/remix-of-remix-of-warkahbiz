@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { Search, X, AlertTriangle } from "lucide-react";
 import type { StockItem, Product } from "@/types";
 import { fmtQty } from "@/lib/format";
+import { emojiForItem } from "@/lib/stockEmoji";
+
 
 const isLow = (s: StockItem) => (s.maxQty ?? 0) > 0 && s.qty < (s.maxQty ?? 0) * 0.2;
 
