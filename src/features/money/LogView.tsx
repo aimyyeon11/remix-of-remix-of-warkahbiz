@@ -42,6 +42,22 @@ export const LogView = ({ txns, today, week, month, petty, opex, todayCogs, toda
   const filtered = (filter === "all" ? txns : filter === "in" ? txns.filter(t => t.type === "in") : txns.filter(t => t.type === "out")).slice().reverse();
   const balance = petty[petty.length - 1]?.balance ?? 0;
 
+  // Group sales by date when filter === "in"
+  const salesByDate = (() => {
+    if (filter !== "in") return [];
+    const map = new Map<string, { dateKey: string; label: string; total: number; items: Txn[] }>();
+    txns.filter(t => t.type === "in").forEach(t => {
+      const d = t.createdAt ? new Date(t.createdAt) : new Date(t.ts);
+      const key = d.toISOString().slice(0, 10);
+      const label = d.toLocaleDateString("ms-MY", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+      const cur = map.get(key) ?? { dateKey: key, label, total: 0, items: [] };
+      cur.total += t.amount;
+      cur.items.push(t);
+      map.set(key, cur);
+    });
+    return Array.from(map.values()).sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+  })();
+
   const opexByCategory = OPEX_CATEGORIES.reduce((acc, cat) => {
     acc[cat] = opex.filter((e) => e.category === cat).reduce((s, e) => s + e.amount, 0);
     return acc;
@@ -96,25 +112,57 @@ export const LogView = ({ txns, today, week, month, petty, opex, todayCogs, toda
             <MiniStat label="Untung" value={sum.profit} tone="profit" />
           </div>
 
-          <section className="space-y-2">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">Transaksi</h2>
-            <div className="space-y-2">
-              {filtered.map(t => (
-                <div key={t.id} className="rounded-2xl p-3.5 bg-surface border border-border flex items-center gap-3 animate-fade-in">
-                  <div className={`w-11 h-11 rounded-2xl grid place-items-center text-2xl ${t.type === "in" ? "bg-profit/15" : "bg-cost/15"}`}>
-                    {t.emoji}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold leading-tight truncate">{t.label}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{t.time}</div>
-                  </div>
-                  <div className={`font-extrabold text-lg ${t.type === "in" ? "text-profit" : "text-cost"}`}>
-                    {t.type === "in" ? "+" : "−"}{fmt(t.amount)}
-                  </div>
+          {filter === "in" ? (
+            <section className="space-y-3">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">Jualan Mengikut Tarikh</h2>
+              {salesByDate.length === 0 ? (
+                <div className="rounded-2xl p-6 bg-surface border border-dashed border-border text-center text-sm text-muted-foreground">
+                  Tiada jualan direkod.
                 </div>
-              ))}
-            </div>
-          </section>
+              ) : (
+                salesByDate.map(group => (
+                  <div key={group.dateKey} className="rounded-2xl bg-surface border border-border overflow-hidden">
+                    <div className="px-4 py-2.5 bg-surface-elevated flex items-center justify-between">
+                      <span className="text-xs font-bold">{group.label}</span>
+                      <span className="font-extrabold text-profit">+{fmt(group.total)}</span>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {group.items.slice().reverse().map(t => (
+                        <div key={t.id} className="px-4 py-2.5 flex items-center gap-3">
+                          <span className="text-xl">{t.emoji}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-semibold truncate">{t.label}</div>
+                            <div className="text-[11px] text-muted-foreground">{t.time}</div>
+                          </div>
+                          <div className="font-bold text-sm text-profit">+{fmt(t.amount)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </section>
+          ) : (
+            <section className="space-y-2">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">Transaksi</h2>
+              <div className="space-y-2">
+                {filtered.map(t => (
+                  <div key={t.id} className="rounded-2xl p-3.5 bg-surface border border-border flex items-center gap-3 animate-fade-in">
+                    <div className={`w-11 h-11 rounded-2xl grid place-items-center text-2xl ${t.type === "in" ? "bg-profit/15" : "bg-cost/15"}`}>
+                      {t.emoji}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold leading-tight truncate">{t.label}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{t.time}</div>
+                    </div>
+                    <div className={`font-extrabold text-lg ${t.type === "in" ? "text-profit" : "text-cost"}`}>
+                      {t.type === "in" ? "+" : "−"}{fmt(t.amount)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </>
       ) : filter === "petty" ? (
         <>
@@ -243,6 +291,42 @@ export const LogView = ({ txns, today, week, month, petty, opex, todayCogs, toda
                       </div>
                     </div>
                     <div className="font-extrabold text-sm text-cost">−RM {e.amount.toFixed(2)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Rekod Petty Cash</h2>
+              <span className="text-[10px] font-bold text-muted-foreground">Tidak dikira dalam Untung Bersih</span>
+            </div>
+            <div className="rounded-2xl p-3 bg-warn/5 border border-warn/30 flex items-center gap-3">
+              <Coins className="w-5 h-5 text-warn shrink-0" />
+              <div className="flex-1">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Baki Petty Cash</div>
+                <div className="text-lg font-extrabold">RM {balance.toFixed(2)}</div>
+              </div>
+            </div>
+            {petty.length === 0 ? (
+              <div className="rounded-2xl p-6 bg-surface border border-dashed border-border text-center text-sm text-muted-foreground">
+                Tiada rekod petty cash.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {[...petty].reverse().slice(0, 10).map((p) => (
+                  <div key={p.id} className="rounded-2xl p-3 bg-surface border border-border flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl grid place-items-center text-xl ${p.type === "in" ? "bg-profit/15" : "bg-cost/15"}`}>
+                      {p.emoji}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm truncate">{p.desc}</div>
+                      <div className="text-[11px] text-muted-foreground">{p.time} • Baki: RM {p.balance.toFixed(2)}</div>
+                    </div>
+                    <div className={`font-extrabold text-sm ${p.type === "in" ? "text-profit" : "text-cost"}`}>
+                      {p.type === "in" ? "+" : "−"}RM {p.amount.toFixed(2)}
+                    </div>
                   </div>
                 ))}
               </div>

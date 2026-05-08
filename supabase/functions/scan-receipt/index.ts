@@ -5,10 +5,12 @@ Parse the receipt image and extract structured data. Return ONLY a JSON object v
 
 Rules:
 - Detect vendor name and date (format date as readable string e.g. "24 April 2026", or empty if unknown).
+- Extract the printed grand total (after tax/rounding) into "total". Extract total tax (SST/GST/service charge) into "tax". Use 0 if absent.
 - Each item: name (short, in Malay if possible), qty (number), unit (one of: kg, g, liter, ml, biji, pek, kotak, batang, helai, tong, papan, kampit, ekor, unit, pcs, box, pack, dozen), price (RM, total for that line, number).
 - Pick a relevant emoji per item (🍗 ayam, 🥚 telur, 🍚 beras, 🛢️ minyak, 🌾 tepung, 🥤 gula, 🧂 garam, 🧅 bawang, 🌶️ cili, 🥛 santan, 📦 bungkus, 🛒 generic).
 - If qty/unit unclear, default qty=1 unit="unit".
-- Skip taxes, totals, subtotals — items only.`;
+- Skip subtotal/tax/total LINES from the items list — they are returned separately as total/tax fields.
+- Verify your work: sum(item prices) + tax should equal total. If it does not, re-read the receipt carefully before returning.`;
 
 const TOOL_SCHEMA = {
   type: "function",
@@ -20,6 +22,8 @@ const TOOL_SCHEMA = {
       properties: {
         vendor: { type: "string" },
         date: { type: "string" },
+        tax: { type: "number", description: "Total tax amount in RM, or 0 if none" },
+        total: { type: "number", description: "Grand total printed on the receipt in RM" },
         items: {
           type: "array",
           items: {
@@ -36,7 +40,7 @@ const TOOL_SCHEMA = {
           },
         },
       },
-      required: ["vendor", "date", "items"],
+      required: ["vendor", "date", "tax", "total", "items"],
       additionalProperties: false,
     },
   },
@@ -89,9 +93,9 @@ Deno.serve(async (req) => {
     const data = await res.json();
     const argsStr = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
     if (!argsStr) return json({ ok: false, error: "no_tool_call", message: "AI tak dapat baca resit." });
-    let parsed: { vendor: string; date: string; items: Array<{ emoji: string; name: string; qty: number; unit: string; price: number }> };
+    let parsed: { vendor: string; date: string; tax?: number; total?: number; items: Array<{ emoji: string; name: string; qty: number; unit: string; price: number }> };
     try { parsed = JSON.parse(argsStr); } catch { return json({ ok: false, error: "bad_json", message: "Format salah." }); }
-    return json({ ok: true, vendor: parsed.vendor || "", date: parsed.date || "", items: parsed.items || [] });
+    return json({ ok: true, vendor: parsed.vendor || "", date: parsed.date || "", tax: Number(parsed.tax) || 0, total: Number(parsed.total) || 0, items: parsed.items || [] });
   } catch (e) {
     console.error("scan-receipt exception", e);
     return json({ ok: false, error: "exception", message: "Masalah sambungan." });

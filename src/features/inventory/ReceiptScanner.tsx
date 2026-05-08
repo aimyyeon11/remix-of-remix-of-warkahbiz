@@ -28,8 +28,11 @@ export const ReceiptScanner = ({ onClose, onConfirm }: {
   const [imageUrl, setImageUrl] = useState<string>("");
   const [vendor, setVendor] = useState<string>("");
   const [date, setDate] = useState<string>("");
+  const [tax, setTax] = useState<number>(0);
+  const [receiptTotal, setReceiptTotal] = useState<number>(0);
   const [items, setItems] = useState<ReceiptItem[]>([]);
   const [errMsg, setErrMsg] = useState<string>("");
+  const [mismatchWarn, setMismatchWarn] = useState<null | { sum: number; receipt: number; diff: number }>(null);
 
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -58,6 +61,7 @@ export const ReceiptScanner = ({ onClose, onConfirm }: {
   const doScan = async () => {
     if (!imageUrl) return;
     setPhase("scanning");
+    setMismatchWarn(null);
     try {
       const result = await scanReceipt({ data: { imageBase64: imageUrl, mimeType: "image/jpeg" } });
       if (!result.ok) {
@@ -79,7 +83,16 @@ export const ReceiptScanner = ({ onClose, onConfirm }: {
       }
       setVendor(result.vendor);
       setDate(result.date);
+      setTax(result.tax || 0);
+      setReceiptTotal(result.total || 0);
       setItems(parsed);
+
+      // Double-check: items + tax vs printed total
+      const sum = parsed.reduce((s, i) => s + i.price, 0) + (result.tax || 0);
+      const diff = Math.abs(sum - (result.total || 0));
+      if ((result.total || 0) > 0 && diff > 0.05) {
+        setMismatchWarn({ sum, receipt: result.total || 0, diff });
+      }
       setPhase("result");
     } catch (e) {
       console.error(e);
@@ -88,7 +101,8 @@ export const ReceiptScanner = ({ onClose, onConfirm }: {
     }
   };
 
-  const total = items.reduce((s, i) => s + i.price, 0);
+  const itemsTotal = items.reduce((s, i) => s + i.price, 0);
+  const total = itemsTotal + tax;
 
   return (
     <div className="absolute inset-0 z-50 bg-background flex flex-col animate-fade-in">
@@ -175,17 +189,64 @@ export const ReceiptScanner = ({ onClose, onConfirm }: {
                   <span className="text-xl">{i.emoji}</span>
                   <span className="flex-1 font-semibold">{i.name}</span>
                   <span className="text-muted-foreground text-xs">{i.qty} {i.unit}</span>
-                  <span className="font-bold w-16 text-right">RM {i.price.toFixed(2)}</span>
+                  <span className="font-bold w-20 text-right">RM {i.price.toFixed(2)}</span>
                 </div>
               ))}
             </div>
-            <div className="mt-3 border-t border-border pt-3 flex items-center justify-between">
-              <span className="font-bold uppercase text-xs tracking-wider">Jumlah</span>
-              <span className="font-extrabold text-cost text-lg">RM {total.toFixed(2)}</span>
+            <div className="mt-3 border-t border-border pt-3 space-y-1 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Subtotal item</span>
+                <span className="font-semibold">RM {itemsTotal.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Cukai</span>
+                <span className="font-semibold">RM {tax.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-border">
+                <span className="font-bold uppercase text-xs tracking-wider">Jumlah (item + cukai)</span>
+                <span className="font-extrabold text-cost text-lg">RM {total.toFixed(2)}</span>
+              </div>
+              {receiptTotal > 0 && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Total pada resit</span>
+                  <span className="font-semibold">RM {receiptTotal.toFixed(2)}</span>
+                </div>
+              )}
             </div>
           </div>
+
+          {mismatchWarn && (
+            <div className="rounded-2xl bg-warn-soft border border-warn/40 p-4 space-y-3 animate-pop-in">
+              <div className="flex items-start gap-2">
+                <span className="text-2xl">⚠️</span>
+                <div className="flex-1">
+                  <div className="font-extrabold text-sm text-warn-foreground">
+                    Jumlah tidak sepadan
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    Item + cukai = <b>RM {mismatchWarn.sum.toFixed(2)}</b> tetapi total resit = <b>RM {mismatchWarn.receipt.toFixed(2)}</b> (beza RM {mismatchWarn.diff.toFixed(2)}). AI akan scan semula untuk semak.
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setMismatchWarn(null)}
+                  className="h-10 rounded-xl bg-surface border border-border text-xs font-bold tap"
+                >
+                  Abaikan
+                </button>
+                <button
+                  onClick={doScan}
+                  className="h-10 rounded-xl bg-warn text-warn-foreground text-xs font-bold tap"
+                >
+                  🔄 Scan Semula
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => { setPhase("pick"); setImageUrl(""); setItems([]); }} className="h-12 rounded-2xl bg-surface-elevated border border-border font-bold tap">
+            <button onClick={() => { setPhase("pick"); setImageUrl(""); setItems([]); setMismatchWarn(null); }} className="h-12 rounded-2xl bg-surface-elevated border border-border font-bold tap">
               🔄 Scan Lain
             </button>
             <button

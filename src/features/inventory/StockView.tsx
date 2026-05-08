@@ -90,31 +90,31 @@ export const StockView = ({
           <p className="text-sm text-muted-foreground">Tiada item dijumpai</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {filtered.map((s) => <StockRow key={s.id} item={s} />)}
+        <div className="grid grid-cols-2 gap-3">
+          {filtered.map((s) => <StockCard key={s.id} item={s} />)}
         </div>
       )}
     </div>
   );
 };
 
-const StockRow = ({ item }: { item: StockItem }) => {
+const StockCard = ({ item }: { item: StockItem }) => {
   const low = isLow(item);
   return (
-    <div className="rounded-2xl p-3 bg-surface border border-border flex items-center gap-3">
-      <div className="text-3xl shrink-0">{item.emoji || "📦"}</div>
-      <div className="flex-1 min-w-0">
-        <div className="font-bold text-sm truncate">{item.name}</div>
-        <div className="text-lg font-extrabold mt-0.5">
-          {fmtQty(item.qty, item.unit)}
-        </div>
-        {low && (
-          <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/30 text-[10px] font-bold">
-            <AlertTriangle className="w-3 h-3" />
-            Stok rendah
-          </div>
-        )}
+    <div className={`rounded-2xl p-4 bg-surface border flex flex-col items-center text-center gap-1.5 ${low ? "border-warn/40" : "border-border"}`}>
+      <div className="text-4xl leading-none">{item.emoji || "📦"}</div>
+      <div className="font-bold text-sm truncate w-full">{item.name}</div>
+      <div className="text-xl font-extrabold">
+        {fmtQty(item.qty, item.unit)}
       </div>
+      {low ? (
+        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn/30 text-[10px] font-bold">
+          <AlertTriangle className="w-3 h-3" />
+          Stok rendah
+        </div>
+      ) : (
+        <div className="text-[10px] text-muted-foreground">Stok cukup</div>
+      )}
     </div>
   );
 };

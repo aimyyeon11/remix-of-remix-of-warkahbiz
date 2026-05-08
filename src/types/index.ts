@@ -91,10 +91,12 @@ export type OpExCategory =
   | "Pembungkusan"
   | "Gaji"
   | "Pengangkutan"
+  | "Sewa Tapak"
+  | "Lesen"
   | "Lain-lain";
 
 export const OPEX_CATEGORIES: OpExCategory[] = [
-  "Kos Bahan", "Utiliti", "Pembungkusan", "Gaji", "Pengangkutan", "Lain-lain",
+  "Kos Bahan", "Utiliti", "Pembungkusan", "Gaji", "Pengangkutan", "Sewa Tapak", "Lesen", "Lain-lain",
 ];
 
 export const OPEX_EMOJI: Record<OpExCategory, string> = {
@@ -103,6 +105,8 @@ export const OPEX_EMOJI: Record<OpExCategory, string> = {
   "Pembungkusan": "📦",
   "Gaji":         "👷",
   "Pengangkutan": "🚚",
+  "Sewa Tapak":   "🏪",
+  "Lesen":        "📜",
   "Lain-lain":    "🏷️",
 };
 
