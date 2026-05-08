@@ -21,10 +21,12 @@ import { WasteTracker } from "@/features/waste/WasteTracker";
 import { AutopsyReport } from "@/features/autopsy/AutopsyReport";
 import { NotificationCenter, getActiveOpportunityCount } from "@/features/notifications/NotificationCenter";
 import { ProfileView } from "@/features/profile/ProfileView";
+import { CookingLogModal } from "@/features/cooking/CookingLogModal";
+import { CookingLogPrompt } from "@/features/cooking/CookingLogPrompt";
 import { fmt } from "@/lib/format";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import type {
-  Tab, Txn, BuyItem, StockItem, ChatMsg, PettyEntry, ReceiptItem, Unit, OpExEntry, OpExCategory, Product, SavedCard, BusinessHoursSettings, OutletSettings,
+  Tab, Txn, BuyItem, StockItem, ChatMsg, PettyEntry, ReceiptItem, Unit, OpExEntry, OpExCategory, Product, SavedCard, BusinessHoursSettings, OutletSettings, CookingLog,
 } from "@/types";
 import { DEFAULT_OUTLET } from "@/types";
 import { DEFAULT_BUSINESS_HOURS } from "@/features/profile/BusinessHoursView";
