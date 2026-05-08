@@ -151,6 +151,41 @@ const Index = () => {
     toast.success(`${items.length} item berjaya disimpan! 🎉`);
   };
 
+  const handleLogCooking = (productId: string, batches: number) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const usedNames = new Set<string>();
+
+    setStock((prev) => {
+      const next = [...prev];
+      (product.ingredients ?? []).forEach((ing) => {
+        const idx = next.findIndex((s) => s.name.trim().toLowerCase() === ing.name.trim().toLowerCase());
+        if (idx === -1) return;
+        const need = ing.quantity * batches;
+        const newQty = Math.max(0, +(next[idx].qty - need).toFixed(2));
+        next[idx] = { ...next[idx], qty: newQty, lastUsedAt: nowIso };
+        usedNames.add(next[idx].name.toLowerCase());
+      });
+      return next;
+    });
+
+    setCookingLog((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        ts: Date.now(),
+        createdAt: nowIso,
+        productId: product.id,
+        productName: product.name,
+        productEmoji: product.emoji,
+        batches,
+        batchUnit: product.batchUnit ?? "batch",
+      },
+    ]);
+  };
+
   const handleBought = (id: string) => setBuy((prev) => prev.map((b) => b.id === id ? { ...b, done: !b.done } : b));
 
   const handleAdjustStock = (id: string, delta: number) => {
