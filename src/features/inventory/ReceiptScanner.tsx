@@ -20,11 +20,15 @@ const fileToDataUrl = (f: File) =>
     r.readAsDataURL(f);
   });
 
-export const ReceiptScanner = ({ onClose, onConfirm }: {
+type Classification = "stock" | "personal";
+
+export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
   onClose: () => void;
-  onConfirm: (items: ReceiptItem[]) => void;
+  onConfirm: (stockItems: ReceiptItem[], personalItems: ReceiptItem[]) => void;
+  knownIngredients?: string[];
 }) => {
-  const [phase, setPhase] = useState<Phase>("pick");
+  const [phase, setPhase] = useState<Phase | "classify">("pick");
+  const [classifyMap, setClassifyMap] = useState<Record<number, Classification>>({});
   const [imageUrl, setImageUrl] = useState<string>("");
   const [vendor, setVendor] = useState<string>("");
   const [date, setDate] = useState<string>("");
@@ -203,15 +207,9 @@ export const ReceiptScanner = ({ onClose, onConfirm }: {
                 <span className="font-semibold">RM {tax.toFixed(2)}</span>
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border">
-                <span className="font-bold uppercase text-xs tracking-wider">Jumlah (item + cukai)</span>
-                <span className="font-extrabold text-cost text-lg">RM {total.toFixed(2)}</span>
+                <span className="font-bold uppercase text-xs tracking-wider">Jumlah pada resit</span>
+                <span className="font-extrabold text-cost text-lg">RM {(receiptTotal > 0 ? receiptTotal : total).toFixed(2)}</span>
               </div>
-              {receiptTotal > 0 && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Total pada resit</span>
-                  <span className="font-semibold">RM {receiptTotal.toFixed(2)}</span>
-                </div>
-              )}
             </div>
           </div>
 
@@ -250,10 +248,96 @@ export const ReceiptScanner = ({ onClose, onConfirm }: {
               🔄 Scan Lain
             </button>
             <button
-              onClick={() => onConfirm(items)}
+              onClick={() => {
+                const knownSet = new Set(knownIngredients.map((n) => n.toLowerCase().trim()).filter(Boolean));
+                const unknownIdx = items
+                  .map((it, idx) => ({ it, idx }))
+                  .filter(({ it }) => {
+                    const n = it.name.toLowerCase().trim();
+                    if (knownSet.has(n)) return false;
+                    for (const k of knownSet) {
+                      if (k && (n.includes(k) || k.includes(n))) return false;
+                    }
+                    return true;
+                  });
+                if (unknownIdx.length === 0) {
+                  onConfirm(items, []);
+                  return;
+                }
+                const initMap: Record<number, Classification> = {};
+                unknownIdx.forEach(({ idx }) => { initMap[idx] = "stock"; });
+                setClassifyMap(initMap);
+                setPhase("classify");
+              }}
               className="h-12 rounded-2xl bg-gradient-profit text-profit-foreground font-bold tap shadow-card"
             >
               ✅ Confirm & Simpan
+            </button>
+          </div>
+        </div>
+      )}
+
+      {phase === "classify" && (
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+          <div className="rounded-2xl bg-warn-soft border border-warn/40 p-4">
+            <div className="font-extrabold text-sm text-warn-foreground flex items-center gap-2">
+              <span className="text-xl">🤔</span> Item bukan dari produk anda
+            </div>
+            <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              Item berikut tidak padan dengan ramuan produk anda. Pilih kategori untuk setiap satu.
+              Item <b>Peribadi</b> akan dikeluarkan dari rekod stok dan direkodkan sebagai <b>perbelanjaan peribadi</b>.
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {items.map((it, idx) => {
+              if (!(idx in classifyMap)) return null;
+              const choice = classifyMap[idx];
+              return (
+                <div key={idx} className="rounded-2xl bg-surface border border-border p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-xl">{it.emoji}</span>
+                    <span className="flex-1 font-bold">{it.name}</span>
+                    <span className="text-xs text-muted-foreground">{it.qty} {it.unit}</span>
+                    <span className="font-bold text-sm">RM {it.price.toFixed(2)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setClassifyMap((m) => ({ ...m, [idx]: "stock" }))}
+                      className={`h-10 rounded-xl text-xs font-bold tap border ${choice === "stock" ? "bg-profit text-profit-foreground border-profit" : "bg-surface-elevated border-border"}`}
+                    >
+                      📦 Masuk Stok
+                    </button>
+                    <button
+                      onClick={() => setClassifyMap((m) => ({ ...m, [idx]: "personal" }))}
+                      className={`h-10 rounded-xl text-xs font-bold tap border ${choice === "personal" ? "bg-cost text-white border-cost" : "bg-surface-elevated border-border"}`}
+                    >
+                      🧑 Peribadi
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            <button onClick={() => setPhase("result")} className="h-12 rounded-2xl bg-surface-elevated border border-border font-bold tap">
+              ↩️ Kembali
+            </button>
+            <button
+              onClick={() => {
+                const personalIdx = new Set(
+                  Object.entries(classifyMap)
+                    .filter(([, v]) => v === "personal")
+                    .map(([k]) => Number(k)),
+                );
+                const stockItems = items.filter((_, i) => !personalIdx.has(i));
+                const personalItems = items.filter((_, i) => personalIdx.has(i));
+                onConfirm(stockItems, personalItems);
+              }}
+              className="h-12 rounded-2xl bg-gradient-profit text-profit-foreground font-bold tap shadow-card"
+            >
+              ✅ Sahkan
             </button>
           </div>
         </div>

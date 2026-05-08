@@ -118,8 +118,14 @@ export const QuickInputModal = ({ onClose, onSave, onReceiptConfirm, onBoughtIte
     }, 800);
   };
 
-  // Receipt scan -> feed into confirmation screen
-  const handleScannerConfirm = (scanned: ReceiptItem[]) => {
+  // Receipt scan -> classify, then feed into confirmation screen
+  const handleScannerConfirm = (scanned: ReceiptItem[], personal: ReceiptItem[] = []) => {
+    // Record personal items immediately as separate "Peribadi" expenses (excluded from stock)
+    if (personal.length > 0) {
+      personal.forEach((p) => {
+        onSave({ type: "out", emoji: "🧑", label: `Peribadi: ${p.name}`, amount: p.price || 0 });
+      });
+    }
     const mapped: PurchaseLine[] = scanned.map(s => ({
       name: s.name,
       qty: s.qty || 1,
@@ -128,7 +134,11 @@ export const QuickInputModal = ({ onClose, onSave, onReceiptConfirm, onBoughtIte
     }));
     setItems(prev => [...prev, ...mapped]);
     setScanner(false);
-    setConfirming(true);
+    if (mapped.length > 0) setConfirming(true);
+    else if (personal.length > 0) {
+      // Only personal — close modal with success
+      onClose();
+    }
   };
 
   const totalSpent = items.reduce((s, i) => s + i.amount, 0);
@@ -456,6 +466,7 @@ export const QuickInputModal = ({ onClose, onSave, onReceiptConfirm, onBoughtIte
           <ReceiptScanner
             onClose={() => setScanner(false)}
             onConfirm={handleScannerConfirm}
+            knownIngredients={ingredientOptions.map((i) => i.name)}
           />
         )}
       </div>

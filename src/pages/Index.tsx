@@ -307,7 +307,28 @@ const Index = () => {
   const handleBoughtItems = (items: Array<{ name: string; qty: number; unit: string; isOpEx?: boolean }>) => {
     const isMatch = (a: string, b: string) => { const x = a.toLowerCase().trim(); const y = b.toLowerCase().trim(); return x === y || x.includes(y) || y.includes(x); };
     items.forEach((item) => {
-      setStock(prev => { const idx = prev.findIndex(s => isMatch(s.name, item.name)); if (idx === -1) return prev; const updated = [...prev]; const merged = { ...updated[idx], qty: +(updated[idx].qty + item.qty).toFixed(2) }; updated[idx] = bumpPeak(merged); return updated; });
+      setStock(prev => {
+        const idx = prev.findIndex(s => isMatch(s.name, item.name));
+        if (idx === -1) {
+          // New ingredient — create a stock entry
+          const newItem: StockItem = {
+            id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            emoji: "📦",
+            name: item.name,
+            qty: +item.qty.toFixed(2),
+            unit: (item.unit as Unit) || "unit",
+            minQty: 0,
+            restockQty: 0,
+            maxQty: item.qty,
+            category: "Bahan Mentah",
+          };
+          return [...prev, newItem];
+        }
+        const updated = [...prev];
+        const merged = { ...updated[idx], qty: +(updated[idx].qty + item.qty).toFixed(2) };
+        updated[idx] = bumpPeak(merged);
+        return updated;
+      });
       setBuy(prev => prev.map(b => isMatch(b.name, item.name) && !b.done ? { ...b, done: true } : b));
     });
     toast.success(`${items.length} item dikemaskini dalam Stok & Senarai ✅`);
