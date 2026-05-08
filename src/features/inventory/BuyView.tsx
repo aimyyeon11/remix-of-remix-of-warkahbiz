@@ -167,7 +167,8 @@ export const BuyView = ({
   return (
     <div className="px-5 pt-6 space-y-4 pb-32">
       <header className="animate-fade-in">
-        <div className="text-xs font-semibold text-muted-foreground">
+        <h1 className="text-2xl font-extrabold tracking-tight">Nak Beli 🛒</h1>
+        <div className="text-xs font-semibold text-muted-foreground mt-2">
           {doneCount} / {total} selesai
         </div>
         <div className="mt-1 h-2 rounded-full bg-surface overflow-hidden">
