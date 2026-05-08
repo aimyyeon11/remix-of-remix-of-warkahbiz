@@ -42,6 +42,22 @@ export const LogView = ({ txns, today, week, month, petty, opex, todayCogs, toda
   const filtered = (filter === "all" ? txns : filter === "in" ? txns.filter(t => t.type === "in") : txns.filter(t => t.type === "out")).slice().reverse();
   const balance = petty[petty.length - 1]?.balance ?? 0;
 
+  // Group sales by date when filter === "in"
+  const salesByDate = (() => {
+    if (filter !== "in") return [];
+    const map = new Map<string, { dateKey: string; label: string; total: number; items: Txn[] }>();
+    txns.filter(t => t.type === "in").forEach(t => {
+      const d = t.createdAt ? new Date(t.createdAt) : new Date(t.ts);
+      const key = d.toISOString().slice(0, 10);
+      const label = d.toLocaleDateString("ms-MY", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+      const cur = map.get(key) ?? { dateKey: key, label, total: 0, items: [] };
+      cur.total += t.amount;
+      cur.items.push(t);
+      map.set(key, cur);
+    });
+    return Array.from(map.values()).sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+  })();
+
   const opexByCategory = OPEX_CATEGORIES.reduce((acc, cat) => {
     acc[cat] = opex.filter((e) => e.category === cat).reduce((s, e) => s + e.amount, 0);
     return acc;
