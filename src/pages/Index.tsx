@@ -66,6 +66,7 @@ const Index = () => {
   ]);
   const [opex, setOpex] = useLocalStorage<OpExEntry[]>("warkahbiz_opex", []);
   const [products, setProducts] = useLocalStorage<Product[]>("warkahbiz_products", []);
+  const [cookingLog, setCookingLog] = useLocalStorage<CookingLog[]>("warkahbiz_cooking_log", []);
   const [cards, setCards] = useLocalStorage<SavedCard[]>("warkahbiz_cards", []);
   const [businessHours, setBusinessHours] = useLocalStorage<BusinessHoursSettings>("warkahbiz_business_hours", DEFAULT_BUSINESS_HOURS);
   const [outlet, setOutlet] = useLocalStorage<OutletSettings>("warkahbiz_outlet", DEFAULT_OUTLET);
