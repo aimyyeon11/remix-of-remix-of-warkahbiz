@@ -10,7 +10,12 @@ Rules:
 - Pick a relevant emoji per item (🍗 ayam, 🥚 telur, 🍚 beras, 🛢️ minyak, 🌾 tepung, 🥤 gula, 🧂 garam, 🧅 bawang, 🌶️ cili, 🥛 santan, 📦 bungkus, 🛒 generic).
 - If qty/unit unclear, default qty=1 unit="unit".
 - Skip subtotal/tax/total LINES from the items list — they are returned separately as total/tax fields.
-- Verify your work: sum(item prices) + tax should equal total. If it does not, re-read the receipt carefully before returning.`;
+- PRICE PRECISION (CRITICAL): Malaysian prices ALWAYS have exactly 2 decimal places. Read every digit carefully:
+  * "6.90" must be 6.90 (NOT 6.9 or 6.09). "12.05" must be 12.05 (NOT 12.5).
+  * Pay close attention to trailing zeros — RM 6.90, RM 10.00, RM 2.50 are common.
+  * If a printed price looks like "X.X", it is almost certainly "X.X0" — re-read the receipt.
+- Tax in Malaysia (SST/GST) is INCLUDED in the printed total, not added on top. The "total" field must be the final printed amount.
+- Verify your work: sum(item prices) should equal the printed total (within RM 0.10 rounding). If it does NOT match, RE-READ each item price digit by digit, paying special attention to the cents (last 2 digits) before returning.`;
 
 const TOOL_SCHEMA = {
   type: "function",

@@ -91,10 +91,11 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
       setReceiptTotal(result.total || 0);
       setItems(parsed);
 
-      // Double-check: items + tax vs printed total
-      const sum = parsed.reduce((s, i) => s + i.price, 0) + (result.tax || 0);
+      // Tax is already included in printed total (Malaysian SST/GST is a breakdown).
+      // Compare sum of items directly against printed total. Tolerance: RM 0.10.
+      const sum = parsed.reduce((s, i) => s + i.price, 0);
       const diff = Math.abs(sum - (result.total || 0));
-      if ((result.total || 0) > 0 && diff > 0.05) {
+      if ((result.total || 0) > 0 && diff > 0.10) {
         setMismatchWarn({ sum, receipt: result.total || 0, diff });
       }
       setPhase("result");
@@ -106,7 +107,7 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
   };
 
   const itemsTotal = items.reduce((s, i) => s + i.price, 0);
-  const total = itemsTotal + tax;
+  const total = receiptTotal > 0 ? receiptTotal : itemsTotal;
 
   return (
     <div className="absolute inset-0 z-50 bg-background flex flex-col animate-fade-in">
@@ -202,13 +203,15 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
                 <span className="text-muted-foreground">Subtotal item</span>
                 <span className="font-semibold">RM {itemsTotal.toFixed(2)}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Cukai</span>
-                <span className="font-semibold">RM {tax.toFixed(2)}</span>
-              </div>
+              {tax > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Termasuk cukai</span>
+                  <span className="font-semibold">RM {tax.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between pt-1 border-t border-border">
                 <span className="font-bold uppercase text-xs tracking-wider">Jumlah pada resit</span>
-                <span className="font-extrabold text-cost text-lg">RM {(receiptTotal > 0 ? receiptTotal : total).toFixed(2)}</span>
+                <span className="font-extrabold text-cost text-lg">RM {(receiptTotal > 0 ? receiptTotal : itemsTotal).toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -222,8 +225,26 @@ export const ReceiptScanner = ({ onClose, onConfirm, knownIngredients = [] }: {
                     Jumlah tidak sepadan
                   </div>
                   <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Item + cukai = <b>RM {mismatchWarn.sum.toFixed(2)}</b> tetapi total resit = <b>RM {mismatchWarn.receipt.toFixed(2)}</b> (beza RM {mismatchWarn.diff.toFixed(2)}). AI akan scan semula untuk semak.
+                    Subtotal item = <b>RM {mismatchWarn.sum.toFixed(2)}</b> tetapi total resit = <b>RM {mismatchWarn.receipt.toFixed(2)}</b> (beza <b>RM {mismatchWarn.diff.toFixed(2)}</b>). Semak harga setiap item — mungkin ada yang tersalah baca (cth. RM 6.90 jadi RM 6.09).
                   </div>
+                </div>
+              </div>
+              <div className="rounded-xl bg-surface border border-border p-2 space-y-1 max-h-56 overflow-y-auto">
+                {items.map((i, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-xs">
+                    <span>{i.emoji}</span>
+                    <span className="flex-1 truncate font-semibold">{i.name}</span>
+                    <span className="text-muted-foreground">{i.qty} {i.unit}</span>
+                    <span className="font-mono font-bold w-20 text-right">RM {i.price.toFixed(2)}</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-border mt-1">
+                  <span className="font-bold">Jumlah dikira</span>
+                  <span className="font-mono font-extrabold">RM {mismatchWarn.sum.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold">Total resit</span>
+                  <span className="font-mono font-extrabold text-profit">RM {mismatchWarn.receipt.toFixed(2)}</span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
