@@ -354,7 +354,7 @@ const Index = () => {
           // New ingredient — create a stock entry
           const newItem: StockItem = {
             id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            emoji: "📦",
+            emoji: emojiForItem(item.name),
             name: item.name,
             qty: +item.qty.toFixed(2),
             unit: (item.unit as Unit) || "unit",
