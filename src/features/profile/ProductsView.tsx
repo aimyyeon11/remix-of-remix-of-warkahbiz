@@ -219,11 +219,13 @@ type Step = 1 | 2 | 3;
 const ProductDialog = ({
   open,
   initial,
+  stock = [],
   onClose,
   onSave,
 }: {
   open: boolean;
   initial: Product | null;
+  stock?: StockItem[];
   onClose: () => void;
   onSave: (p: Product) => void;
 }) => {
