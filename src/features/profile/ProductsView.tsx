@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Sparkles, Loader2, ChevronRight, ArrowLeft, Package } from "lucide-react";
+import { Plus, Pencil, Trash2, Sparkles, Loader2, ChevronRight, ArrowLeft, Package, ScanLine } from "lucide-react";
 
+import { scanRecipe } from "@/server/scanRecipe.functions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,7 @@ import { estimateIngredientCost } from "@/server/estimateCost.functions";
 import { multiplierFor, tierFor, tierLabelKey } from "./profitScale";
 import type { Product, ProductIngredient, ProductPackaging, StockItem, Unit } from "@/types";
 
-const UNITS: Unit[] = ["ekor", "kotak", "kg", "gram", "paket", "liter", "botol", "biji", "ikat", "tin", "bungkus", "sudu", "cawan"];
+const UNITS: Unit[] = ["kg", "g", "gram", "liter", "ml", "biji", "pek", "paket", "kotak", "botol", "tin", "bungkus", "batang", "helai", "ikat", "tong", "papan", "kampit", "ekor", "sudu", "cawan", "unit", "pcs", "box", "pack", "dozen"];
 const BATCH_UNITS = ["biji", "pcs", "servings", "kotak", "pek", "botol", "balang", "helai", "ketul"];
 
 const PRODUCT_CATEGORIES = ["Makanan", "Minuman", "Pek & Set", "Lain-lain"] as const;
@@ -795,23 +796,80 @@ const IngredientsStep = ({
   stock?: StockItem[];
 }) => {
   const { t } = useTranslation();
+  const recipeInputRef = useRef<HTMLInputElement>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   const add = () => {
     setIngredients((prev) => [
-      ...prev,
       { id: `ing-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, name: "", quantity: 1, unit: "unit" as Unit, predictedCost: undefined },
+      ...prev,
     ]);
   };
 
   const addMany = (n: number) => {
     setIngredients((prev) => {
       const base = Date.now();
-      const next = [...prev];
+      const newRows: ProductIngredient[] = [];
       for (let i = 0; i < n; i++) {
-        next.push({ id: `ing-${base}-${i}-${Math.random().toString(36).slice(2,5)}`, name: "", quantity: 1, unit: "unit" as Unit, predictedCost: undefined });
+        newRows.push({ id: `ing-${base}-${i}-${Math.random().toString(36).slice(2,5)}`, name: "", quantity: 1, unit: "unit" as Unit, predictedCost: undefined });
       }
-      return next;
+      return [...newRows, ...prev];
     });
+  };
+
+  const handleRecipeScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Saiz gambar terlalu besar (maks 8MB)");
+      return;
+    }
+    setIsScanning(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await scanRecipe({ data: { imageBase64: base64, mimeType: file.type || "image/jpeg" } });
+      if (!result.ok) {
+        const msgs: Record<string, string> = {
+          rate_limit: "Terlalu banyak permintaan. Cuba lagi sebentar.",
+          no_credits: "Kredit AI habis.",
+          missing_key: "AI belum disambungkan.",
+          bad_json: "AI tidak dapat membaca bahan. Cuba gambar lebih jelas.",
+        };
+        toast.error(msgs[result.error ?? ""] ?? result.message ?? "Gagal imbas resepi.");
+        return;
+      }
+      if (!result.items || result.items.length === 0) {
+        toast.error("AI tidak jumpa bahan dalam gambar ini. Cuba gambar yang lebih jelas.");
+        return;
+      }
+      const allowedUnits = new Set<Unit>(UNITS);
+      const newIngs: ProductIngredient[] = result.items.map((item, i) => {
+        const rawUnit = (item.unit || "unit").toLowerCase();
+        const unit = (allowedUnits.has(rawUnit as Unit) ? rawUnit : "unit") as Unit;
+        // Auto-link to existing stock if name matches
+        const match = stock.find((s) => s.name.trim().toLowerCase() === (item.name || "").trim().toLowerCase());
+        return {
+          id: `scan-${Date.now()}-${i}`,
+          name: item.name || "Bahan",
+          quantity: Number(item.qty) > 0 ? Number(item.qty) : 1,
+          unit: match ? match.unit : unit,
+          predictedCost: undefined,
+        };
+      });
+      setIngredients((prev) => [...newIngs, ...prev]);
+      toast.success(`${newIngs.length} bahan dikesan dari resepi ✅`);
+    } catch (err) {
+      console.error("Recipe scan error:", err);
+      toast.error("Ralat semasa imbas resepi. Cuba lagi.");
+    } finally {
+      setIsScanning(false);
+      if (recipeInputRef.current) recipeInputRef.current.value = "";
+    }
   };
 
   const update = (id: string, patch: Partial<ProductIngredient>) => {
@@ -837,6 +895,26 @@ const IngredientsStep = ({
           </Button>
         </div>
       </div>
+
+      <input
+        ref={recipeInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleRecipeScan}
+      />
+      <button
+        type="button"
+        onClick={() => recipeInputRef.current?.click()}
+        disabled={isScanning}
+        className="w-full h-12 rounded-2xl border border-dashed border-primary/50 bg-primary/5 flex items-center justify-center gap-2 tap text-sm font-bold text-primary disabled:opacity-50"
+      >
+        {isScanning ? (
+          <><Loader2 className="w-4 h-4 animate-spin" /> AI sedang baca resepi...</>
+        ) : (
+          <><ScanLine className="w-4 h-4" /> Imbas Resepi (AI)</>
+        )}
+      </button>
 
       {stock.length > 0 && (
         <div className="rounded-xl bg-muted/40 border border-border px-3 py-2 text-[11px] text-muted-foreground">
@@ -903,6 +981,7 @@ const IngredientCard = ({
   const [estimating, setEstimating] = useState(false);
   const [editingCost, setEditingCost] = useState(false);
   const [costDraft, setCostDraft] = useState("");
+  const [qtyDraft, setQtyDraft] = useState(ingredient.quantity === 0 ? "" : String(ingredient.quantity));
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-estimate when name + qty change (debounced)
@@ -978,17 +1057,33 @@ const IngredientCard = ({
 
         <div className="grid grid-cols-2 gap-2">
           <Input
-            type="number"
+            type="text"
             inputMode="decimal"
-            step="0.01"
-            min="0"
-            value={ingredient.quantity === 0 ? "" : ingredient.quantity}
-            onChange={(e) => onChange({
-              quantity: e.target.value === "" ? 0 : Number(e.target.value),
-              manualCost: false,
-            })}
+            value={qtyDraft}
             placeholder={t("ingredientQty")}
             className="h-11 rounded-xl"
+            onFocus={(e) => e.target.select()}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (raw === "" || /^\d*\.?\d*$/.test(raw)) {
+                setQtyDraft(raw);
+                const parsed = parseFloat(raw);
+                if (!isNaN(parsed) && parsed >= 0) {
+                  onChange({ quantity: parsed, manualCost: false });
+                } else if (raw === "" || raw === "0.") {
+                  onChange({ quantity: 0, manualCost: false });
+                }
+              }
+            }}
+            onBlur={() => {
+              const parsed = parseFloat(qtyDraft);
+              if (isNaN(parsed) || parsed < 0) {
+                setQtyDraft("");
+                onChange({ quantity: 0, manualCost: false });
+              } else {
+                setQtyDraft(String(parsed));
+              }
+            }}
           />
           <select
             value={ingredient.unit}
