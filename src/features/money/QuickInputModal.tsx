@@ -466,6 +466,7 @@ export const QuickInputModal = ({ onClose, onSave, onReceiptConfirm, onBoughtIte
           <ReceiptScanner
             onClose={() => setScanner(false)}
             onConfirm={handleScannerConfirm}
+            knownIngredients={ingredientOptions.map((i) => i.name)}
           />
         )}
       </div>
